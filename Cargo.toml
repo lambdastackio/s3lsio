@@ -1,0 +1,6 @@
+[package]
+name = "s3lsio"
+version = "0.1.0"
+authors = ["Chris Jones <cj@hanscj.com>"]
+
+[dependencies]
