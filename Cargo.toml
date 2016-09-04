@@ -1,6 +1,35 @@
 [package]
 name = "s3lsio"
 version = "0.1.0"
-authors = ["Chris Jones <cj@hanscj.com>"]
+authors = ["Chris Jones <chris.jones@lambdastack.io>"]
+license = "Apache-2.0"
+readme = "README.md"
+keywords = ["aws", "s3"]
+repository = "https://github.com/lambdastackio/s3lsio"
+homepage = "https://github.com/lambdastackio/s3lsio"
+documentation = "https://github.com/lambdastackio/s3lsio"
+description = """
+S3lsio is a command line utility for AWS S3 operations. It support V2 and V4 signatures. A number of 3rd party products
+that accept S3 APIs use V2 signatures.
+"""
 
 [dependencies]
+lsio = "0.1"
+aws-sdk-rust = "0.1"
+clap = "2"
+url = "*"
+num_cpus = "1"
+uuid = { version = "*", features = ["v4"] }
+unicase = "*"
+handlebars = "0.20.0"
+log = "0.3"
+env_logger = "0.3.4"
+term = "0.4"
+
+# Remove clap = "2" from dependencies above if using this type
+
+#[dependencies.clap]
+#version = "2"
+#default-features = false
+
+#features = [ "suggestions", "color" ]
