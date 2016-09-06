@@ -15,8 +15,17 @@
 
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
+use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
+use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
+use aws_sdk_rust::aws::s3::acl::*;
+use aws_sdk_rust::aws::s3::object::*;
 
-pub fn commands(matches: &ArgMatches) -> Result<(), S3Error> {
+use term;
+use Client;
+use Output;
+use util::*;
+
+pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
     println!("{:#?}", matches);
 
         Ok(())

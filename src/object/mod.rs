@@ -26,14 +26,36 @@ pub mod put;
 pub mod delete;
 
 pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
-    println!("Object -- {:#?}", matches);
+    //println!("Object -- {:#?}", matches);
 
+    match matches.subcommand() {
+        ("get", Some(sub_matches)) => {
+            match get::commands(sub_matches, client) {
+                Err(e) => Err(e),
+                Ok(_) => Ok(())
+            }
+        }
+        ("put", Some(sub_matches)) => {
+            match put::commands(sub_matches, client) {
+                Err(e) => Err(e),
+                Ok(_) => Ok(())
+            }
+        },
+        ("delete", Some(sub_matches)) => delete::commands(sub_matches),
+        (e, _) => {
+            let error = format!("incorrect or missing request {}", e);
+            println!("{}", error);
+            Err(S3Error::new(error))
+        },
+    };
+
+/*
     match matches.subcommand() {
         ("get", Some(sub_matches)) => get::commands(sub_matches),
         ("put", Some(sub_matches)) => put::commands(sub_matches),
         ("delete", Some(sub_matches)) => delete::commands(sub_matches),
         (_, _) => unreachable!(),
     };
-
+*/
     Ok(())
 }

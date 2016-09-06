@@ -1,6 +1,6 @@
 [package]
 name = "s3lsio"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Chris Jones <chris.jones@lambdastack.io>"]
 license = "Apache-2.0"
 readme = "README.md"
@@ -25,6 +25,8 @@ handlebars = "0.20.0"
 log = "0.3"
 env_logger = "0.3.4"
 term = "0.4"
+serde = "*"
+serde_json = "*"
 
 # Remove clap = "2" from dependencies above if using this type
 

@@ -24,7 +24,9 @@ use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 use aws_sdk_rust::aws::s3::acl::*;
 use aws_sdk_rust::aws::s3::bucket::*;
+use aws_sdk_rust::aws::s3::object::ListObjectsRequest;
 
+use term;
 use Client;
 use Output;
 use util::*;
@@ -40,17 +42,18 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
             let acl = get_bucket_acl(bucket, client);
             if let Ok(acl) = acl {
                 print_acl_output(&acl, &client.output);
-            } else if let Err(acl) = acl {
-                //println!("{:#?}", acl);
             }
-        }
+        },
         (e,_) => {
             if e.is_empty() && bucket.is_empty() {
-                get_bucket_list(client);
+                // Lists buckets
+                get_buckets_list(client);
+            } else if e.is_empty() && !bucket.is_empty(){
+                // Lists objects of a given bucket
+                get_bucket_list(bucket, client);
             } else {
                 let error = format!("incorrect or missing request {}", e);
-                println!("{}", error);
-                //Err(S3Error::new(error))
+                println_color!(term::color::RED, "{}", error);
             }
         }
     }
@@ -58,7 +61,7 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
     Ok(())
 }
 
-fn get_bucket_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client: &Client<P,D>) -> Result<(), S3Error> {
+fn get_buckets_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client: &Client<P,D>) -> Result<(), S3Error> {
     match client.s3client.list_buckets() {
       Ok(output) => {
           let format = format!("{:#?}", output);
@@ -67,21 +70,42 @@ fn get_bucket_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client: 
       }
       Err(error) => {
           let format = format!("{:#?}", error);
+          print_error(&client.error, &format);
           let error = S3Error::new(format);
-          print_error(&client.error, &error);
           Err(error)
       }
     }
 }
 
-fn get_bucket_acl<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucket: &str, client: &Client<P,D>) -> Result<AccessControlPolicy, S3Error> {
+fn get_bucket_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucket: &str, client: &Client<P,D>) -> Result<(), S3Error> {
+    let mut list_objects = ListObjectsRequest::default();
+    list_objects.bucket = bucket.to_string();
+
+    match client.s3client.list_objects(&list_objects) {
+      Ok(output) => {
+          let format = format!("{:#?}", output);
+          print_output(&client.output, &format);
+          Ok(())
+      }
+      Err(error) => {
+          let format = format!("{:#?}", error);
+          print_error(&client.error, &format);
+          let error = S3Error::new(format);
+          Err(error)
+      }
+    }
+}
+
+pub fn get_bucket_acl<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucket: &str, client: &Client<P,D>) -> Result<AccessControlPolicy, S3Error> {
     let mut get_bucket_acl = GetBucketAclRequest::default();
     get_bucket_acl.bucket = bucket.to_string();
 
     match client.s3client.get_bucket_acl(&get_bucket_acl) {
         Ok(acl) => Ok(acl),
         Err(e) => {
-            print_error(&client.error, &e);
+            let format = format!("{:#?}", e);
+            println_color!(term::color::RED, "missing bucket name");
+            print_error(&client.error, &format);
             Err(e)
         }
     }

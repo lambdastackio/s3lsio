@@ -35,7 +35,12 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
                 Ok(_) => Ok(())
             }
         }
-        ("put", Some(sub_matches)) => put::commands(sub_matches),
+        ("put", Some(sub_matches)) => {
+            match put::commands(sub_matches, client) {
+                Err(e) => Err(e),
+                Ok(_) => Ok(())
+            }
+        },
         ("delete", Some(sub_matches)) => delete::commands(sub_matches),
         (e, _) => {
             let error = format!("incorrect or missing request {}", e);

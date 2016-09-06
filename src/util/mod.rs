@@ -25,18 +25,13 @@ use OutputFormat;
 
 // For Utilities...
 
-pub fn verify(matches: &ArgMatches) -> Result<(), S3Error> {
-    println!("{:#?}", matches);
-
-    Ok(())
-}
-
-pub fn print_error(format: &Error, e: &S3Error) {
+pub fn print_error(format: &Error, out: &str) {
     let ref error = *format;
     match error.format {
         OutputFormat::serialize => {
-            println_color!(error.color, "{:#?}", e);
+            println_color!(error.color, "{}", out);
         },
+        OutputFormat::none => {},
         _ => println!("error"),
     }
 }
@@ -48,6 +43,7 @@ pub fn print_output(format: &Output, out: &str) {
             // Could have already been serialized before being passed to this function.
             println_color!(output.color, "{}", out);
         },
+        OutputFormat::none => {},
         _ => println!("error"),
     }
 }

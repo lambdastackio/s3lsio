@@ -15,9 +15,41 @@
 
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
+use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
+use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
+use aws_sdk_rust::aws::s3::acl::*;
+use aws_sdk_rust::aws::s3::object::*;
 
-pub fn commands(matches: &ArgMatches) -> Result<(), S3Error> {
-    println!("get::commands::{:#?}", matches);
+use term;
+use Client;
+use Output;
+use util::*;
 
-        Ok(())
+pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
+    //println!("Bucket-get -- get::commands::{:#?}", matches);
+    let bucket = matches.value_of("name").unwrap_or("");
+
+    match matches.subcommand() {
+        /// acl command.
+        ("acl", _) => {
+            //let acl = get_object_acl(bucket, client);
+            //if let Ok(acl) = acl {
+            //    print_acl_output(&acl, &client.output);
+            //}
+        },
+        (e,_) => {
+            if e.is_empty() && bucket.is_empty() {
+                // Lists objects
+                //get_buckets_list(client);
+            } else if e.is_empty() && !bucket.is_empty(){
+                // Lists objects
+                //get_object_list(bucket, client);
+            } else {
+                //let error = format!("incorrect or missing request {}", e);
+                //println_color!(term::color::RED, "{}", error);
+            }
+        }
+    }
+
+    Ok(())
 }

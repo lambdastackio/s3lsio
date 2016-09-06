@@ -120,19 +120,44 @@ fn main() {
                         .subcommand(SubCommand::with_name("delete")
                             .arg_from_usage("[name] 'Bucket name'"))
                         .subcommand(SubCommand::with_name("get")
-                            .arg_from_usage("[name] '(Optional) Bucket name'")
+                            .arg_from_usage("[name] 'Bucket name. Leave empty if getting list of buckets'")
                             .subcommand(SubCommand::with_name("acl"))
                                 .about("Returns the bucket ACLs"))
                         .subcommand(SubCommand::with_name("put")
-                            .arg_from_usage("[name] 'Bucket name'")))
+                            .arg_from_usage("[name] 'Bucket name'")
+                            .subcommand(SubCommand::with_name("acl")
+                                .about("Sets the bucket ACLs")
+                                .subcommand(SubCommand::with_name("public-read")
+                                    .about("Allows the public to read the bucket content"))
+                                .subcommand(SubCommand::with_name("public-readwrite")
+                                    .about("Allows the public to read/write the bucket content"))
+                                .subcommand(SubCommand::with_name("public-rw")
+                                    .about("Allows the public to read/write the bucket content"))
+                                .subcommand(SubCommand::with_name("private")
+                                    .about("Sets the bucket content to private")))))
                     .subcommand(SubCommand::with_name("object")
                         .about("Perform all object specific operations")
-                        .arg_from_usage("[name] 'Object name'"))
+                        .subcommand(SubCommand::with_name("delete")
+                            .arg_from_usage("[name] 'Object name'"))
+                        .subcommand(SubCommand::with_name("get")
+                            .arg_from_usage("[name] 'Object name. Leave empty if getting list of objects'")
+                            .subcommand(SubCommand::with_name("acl"))
+                                .about("Returns the object ACLs"))
+                        .subcommand(SubCommand::with_name("put")
+                            .arg_from_usage("[name] 'Object name'")
+                            .subcommand(SubCommand::with_name("acl")
+                                .about("Sets the Object ACLs")
+                                .subcommand(SubCommand::with_name("public-read")
+                                    .about("Allows the public to read the object"))
+                                .subcommand(SubCommand::with_name("public-readwrite")
+                                    .about("Allows the public to read/write the object"))
+                                .subcommand(SubCommand::with_name("public-rw")
+                                    .about("Allows the public to read/write the object"))
+                                .subcommand(SubCommand::with_name("private")
+                                    .about("Sets the object to private")))))
                     .subcommand(SubCommand::with_name("endpoint")
                         .about("Specify the S3 endpoint")
                         .arg_from_usage("[url] '(Optional) - Endpoint for the S3 interface'"))
-                    .subcommand(SubCommand::with_name("verify")
-                        .about("Verifies credentials for your connection"))
                     .get_matches();
 
     // NOTE: Get parameters or config for region, signature etc
@@ -159,7 +184,6 @@ fn main() {
     let res = match matches.subcommand() {
         ("bucket", Some(sub_matches)) => bucket::commands(sub_matches, &mut client),
         ("object", Some(sub_matches)) => object::commands(sub_matches, &mut client),
-        ("verify", Some(sub_matches)) => util::verify(sub_matches),
         (e, _) => {
             println!("{}", e);
             Err(S3Error::new("incorrect request"))
