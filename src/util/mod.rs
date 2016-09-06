@@ -13,6 +13,8 @@
 // limitations under the License.
 //
 
+#![allow(unused_imports)]
+
 extern crate num_cpus;
 
 use clap::ArgMatches;
@@ -28,10 +30,10 @@ use OutputFormat;
 pub fn print_error(format: &Error, out: &str) {
     let ref error = *format;
     match error.format {
-        OutputFormat::serialize => {
+        OutputFormat::Serialize => {
             println_color!(error.color, "{}", out);
         },
-        OutputFormat::none => {},
+        OutputFormat::None => {},
         _ => println!("error"),
     }
 }
@@ -39,18 +41,11 @@ pub fn print_error(format: &Error, out: &str) {
 pub fn print_output(format: &Output, out: &str) {
     let ref output = *format;
     match output.format {
-        OutputFormat::plain => {
+        OutputFormat::Plain => {
             // Could have already been serialized before being passed to this function.
             println_color!(output.color, "{}", out);
         },
-        OutputFormat::none => {},
+        OutputFormat::None => {},
         _ => println!("error"),
     }
-}
-
-pub fn stats()-> Result<(), S3Error>  {
-    let num = num_cpus::get();
-    println!("CPUs: {}", num);
-
-    Ok(())
 }

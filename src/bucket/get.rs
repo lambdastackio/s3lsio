@@ -13,6 +13,9 @@
 // limitations under the License.
 //
 
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 //! GET verb
 //!
 //! All GET requests are handled in this module.
@@ -39,18 +42,18 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
     match matches.subcommand() {
         /// acl command.
         ("acl", _) => {
-            let acl = get_bucket_acl(bucket, client);
-            if let Ok(acl) = acl {
-                print_acl_output(&acl, &client.output);
-            }
+            // Will bubble error up via try!
+            let acl = try!(get_bucket_acl(bucket, client));
+            let output = print_acl_output(&acl, &client.output);
+        },
+        ("list", _) => {
+            // Will bubble error up via try!
+            let list = try!(get_buckets_list(client));
         },
         (e,_) => {
-            if e.is_empty() && bucket.is_empty() {
-                // Lists buckets
-                get_buckets_list(client);
-            } else if e.is_empty() && !bucket.is_empty(){
+            if e.is_empty() && !bucket.is_empty(){
                 // Lists objects of a given bucket
-                get_bucket_list(bucket, client);
+                let output = get_bucket_list(bucket, client);
             } else {
                 let error = format!("incorrect or missing request {}", e);
                 println_color!(term::color::RED, "{}", error);
@@ -104,7 +107,7 @@ pub fn get_bucket_acl<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucke
         Ok(acl) => Ok(acl),
         Err(e) => {
             let format = format!("{:#?}", e);
-            println_color!(term::color::RED, "missing bucket name");
+            println_color!(term::color::RED, "missing or incorrect bucket name");
             print_error(&client.error, &format);
             Err(e)
         }

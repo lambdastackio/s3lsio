@@ -13,6 +13,9 @@
 // limitations under the License.
 //
 
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
@@ -56,7 +59,7 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
                 Ok(_) => {
                     let acl = get_bucket_acl(bucket, client);
                     if let Ok(acl) = acl {
-                        print_acl_output(&acl, &client.output);
+                        let output = print_acl_output(&acl, &client.output);
                     }
                 },
                 Err(_) => {},

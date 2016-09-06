@@ -14,6 +14,8 @@
 //
 
 // Common
+#![allow(unused_imports)]
+#![allow(unused_variables)]
 
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
@@ -22,6 +24,7 @@ use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 
 use Client;
 
+#[allow(dead_code)]
 pub fn common<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
 
     //println!("Common:: {:#?}", matches);

@@ -13,6 +13,9 @@
 // limitations under the License.
 //
 
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
@@ -27,15 +30,14 @@ use util::*;
 
 pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
     //println!("Bucket-get -- get::commands::{:#?}", matches);
-    let bucket = matches.value_of("name").unwrap_or("");
+    let bucket = matches.value_of("bucket").unwrap_or("");
+    let object = matches.value_of("name").unwrap_or("");
 
     match matches.subcommand() {
         /// acl command.
         ("acl", _) => {
-            //let acl = get_object_acl(bucket, client);
-            //if let Ok(acl) = acl {
-            //    print_acl_output(&acl, &client.output);
-            //}
+            let acl = try!(get_object_acl(bucket, object, client));
+            let output = print_acl_output(&acl, &client.output);
         },
         (e,_) => {
             if e.is_empty() && bucket.is_empty() {
@@ -50,6 +52,28 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
             }
         }
     }
+
+    Ok(())
+}
+
+pub fn get_object_acl<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucket: &str, object: &str, client: &Client<P,D>) -> Result<AccessControlPolicy, S3Error> {
+    let mut get_object_acl = GetObjectAclRequest::default();
+    get_object_acl.bucket = bucket.to_string();
+    get_object_acl.key = object.to_string();
+
+    match client.s3client.get_object_acl(&get_object_acl) {
+        Ok(acl) => Ok(acl),
+        Err(e) => {
+            let format = format!("{:#?}", e);
+            println_color!(term::color::RED, "missing or incorrect bucket name or object name");
+            print_error(&client.error, &format);
+            Err(e)
+        }
+    }
+}
+
+fn print_acl_output(acl: &AccessControlPolicy, output: &Output) -> Result<(), S3Error> {
+    println!("{:#?}", acl);
 
     Ok(())
 }

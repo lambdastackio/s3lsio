@@ -13,6 +13,8 @@
 // limitations under the License.
 //
 
+#![allow(unused_imports)]
+
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
@@ -41,7 +43,7 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
                 Ok(_) => Ok(())
             }
         },
-        ("delete", Some(sub_matches)) => delete::commands(sub_matches),
+        ("delete", Some(sub_matches)) => delete::commands(sub_matches, client),
         (e, _) => {
             let error = format!("incorrect or missing request {}", e);
             println!("{}", error);

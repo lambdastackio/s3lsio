@@ -13,6 +13,8 @@
 // limitations under the License.
 //
 
+#![allow(unused_imports)]
+
 // NOTE: This attribute only needs to be set once.
 #![doc(html_logo_url = "https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
        html_favicon_url = "https://www.rust-lang.org/favicon.ico",
@@ -46,10 +48,10 @@ use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 ///
 #[derive(Debug, Clone, Copy)]
 pub enum OutputFormat {
-    json,
-    plain,
-    serialize,
-    none,
+    JSON,
+    Plain,
+    Serialize,
+    None,
 }
 
 // Error and Output can't have derive(debug) because term does not have some of it's structs
@@ -118,12 +120,17 @@ fn main() {
                     .subcommand(SubCommand::with_name("bucket")
                         .about("Perform all bucket specific operations")
                         .subcommand(SubCommand::with_name("delete")
+                            .about("Delete operation for bucket")
                             .arg_from_usage("[name] 'Bucket name'"))
                         .subcommand(SubCommand::with_name("get")
+                            .about("Get operation for bucket")
                             .arg_from_usage("[name] 'Bucket name. Leave empty if getting list of buckets'")
-                            .subcommand(SubCommand::with_name("acl"))
+                            .subcommand(SubCommand::with_name("acl")
                                 .about("Returns the bucket ACLs"))
+                            .subcommand(SubCommand::with_name("list")
+                                .about("Returns the list of buckets")))
                         .subcommand(SubCommand::with_name("put")
+                            .about("Put operation for bucket")
                             .arg_from_usage("[name] 'Bucket name'")
                             .subcommand(SubCommand::with_name("acl")
                                 .about("Sets the bucket ACLs")
@@ -138,12 +145,15 @@ fn main() {
                     .subcommand(SubCommand::with_name("object")
                         .about("Perform all object specific operations")
                         .subcommand(SubCommand::with_name("delete")
+                            .about("Delete operation for objects")
                             .arg_from_usage("[name] 'Object name'"))
                         .subcommand(SubCommand::with_name("get")
-                            .arg_from_usage("[name] 'Object name. Leave empty if getting list of objects'")
+                            .arg_from_usage("[bucket] 'Bucket name.'")
+                            .arg_from_usage("[name] 'Object name.'")
                             .subcommand(SubCommand::with_name("acl"))
                                 .about("Returns the object ACLs"))
                         .subcommand(SubCommand::with_name("put")
+                            .about("Put operation for objects")
                             .arg_from_usage("[name] 'Object name'")
                             .subcommand(SubCommand::with_name("acl")
                                 .about("Sets the Object ACLs")
@@ -175,9 +185,9 @@ fn main() {
                             endpoint);
 
     let mut client = Client{s3client: &mut s3client,
-                            error: Error{format: OutputFormat::serialize,
+                            error: Error{format: OutputFormat::Serialize,
                                          color: term::color::RED},
-                            output: Output{format: OutputFormat::plain,
+                            output: Output{format: OutputFormat::Plain,
                                          color: term::color::GREEN}};
 
     // Check which subcomamnd the user ran...

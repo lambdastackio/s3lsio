@@ -13,10 +13,19 @@
 // limitations under the License.
 //
 
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
+use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
+use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 
-pub fn commands(matches: &ArgMatches) -> Result<(), S3Error> {
+use Client;
+
+pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
+    //println!("Bucket-get -- get::commands::{:#?}", matches);
+    let bucket = matches.value_of("name").unwrap_or("");
     println!("{:#?}", matches);
 
     Ok(())
