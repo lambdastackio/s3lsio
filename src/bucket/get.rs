@@ -53,10 +53,13 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
                     println_color!(client.output.color, "{:#?}", acl);
                 },
                 OutputFormat::JSON => {
+                    println_color!(client.output.color, "{}", json::encode(&acl).unwrap_or("{}".to_string()));
+                },
+                OutputFormat::PrettyJSON => {
                     println_color!(client.output.color, "{}", json::as_pretty_json(&acl));
                 },
                 OutputFormat::None => {},
-                _ => println!("error"),
+                e @ _ => println!("Error: Format - {:#?}", e),
             }
 
         },
@@ -126,10 +129,4 @@ pub fn get_bucket_acl<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucke
             Err(e)
         }
     }
-}
-
-fn print_acl_output(acl: &AccessControlPolicy, output: &Output) -> Result<(), S3Error> {
-    println!("{:#?}", acl);
-
-    Ok(())
 }
