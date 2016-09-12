@@ -25,8 +25,9 @@ handlebars = "0.20.0"
 log = "0.3"
 env_logger = "0.3.4"
 term = "0.4"
-serde = "*"
-serde_json = "*"
+rustc-serialize = "0.3"
+#serde = "*"
+#serde_json = "*"
 
 # Remove clap = "2" from dependencies above if using this type
 

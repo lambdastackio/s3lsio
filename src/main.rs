@@ -23,6 +23,7 @@
 #[macro_use]
 extern crate lsio;
 extern crate aws_sdk_rust;
+extern crate rustc_serialize;
 extern crate term;
 extern crate url;
 extern crate uuid;
@@ -34,8 +35,11 @@ extern crate clap;
 extern crate unicase;
 
 use std::io::{self, Write};
+use std::env;
+use std::path::PathBuf;
 
-use clap::{App, SubCommand, AppSettings};
+use clap::{App, Arg, SubCommand, AppSettings};
+use url::Url;
 
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::s3::endpoint::*;
@@ -49,6 +53,7 @@ use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 #[derive(Debug, Clone, Copy)]
 pub enum OutputFormat {
     JSON,
+    PrettyJSON,
     Plain,
     Serialize,
     None,
@@ -94,91 +99,79 @@ pub struct Client<'a, P: 'a, D: 'a>
     pub s3client: &'a mut S3Client<P, D>,
     pub error: Error,
     pub output: Output,
+    pub is_default_config: bool,
 }
 
 mod bucket;
 mod object;
 mod util;
 mod common;
-
-const NAME: &'static str = "s3lsio";
+mod cli;
 
 fn main() {
     env_logger::init().unwrap();
 
-    let matches = App::new(NAME)
-                    .about("S3 Client Utility that can access AWS S3, Ceph or any third party S3 enable environment")
-                    .author("Chris Jones <chris.jones@lambdastack.io>")
-                    // Get the version from our Cargo.toml using clap's crate_version!() macro
-                    .version(&*format!("v{}", crate_version!()))
-                    .setting(AppSettings::SubcommandRequired)
-                    .after_help("For more information about a specific command, try `s3lsio <command> --help`\nSource code for s3lsio available at: https://github.com/lambdastackio/s3lsio")
-                    .subcommand(SubCommand::with_name("signature")
-                        .about("Overrides the default API signature of V4"))
-                    .subcommand(SubCommand::with_name("proxy")
-                        .about("Allows for proxy url with port"))
-                    .subcommand(SubCommand::with_name("bucket")
-                        .about("Perform all bucket specific operations")
-                        .subcommand(SubCommand::with_name("delete")
-                            .about("Delete operation for bucket")
-                            .arg_from_usage("[name] 'Bucket name'"))
-                        .subcommand(SubCommand::with_name("get")
-                            .about("Get operation for bucket")
-                            .arg_from_usage("[name] 'Bucket name. Leave empty if getting list of buckets'")
-                            .subcommand(SubCommand::with_name("acl")
-                                .about("Returns the bucket ACLs"))
-                            .subcommand(SubCommand::with_name("list")
-                                .about("Returns the list of buckets")))
-                        .subcommand(SubCommand::with_name("put")
-                            .about("Put operation for bucket")
-                            .arg_from_usage("[name] 'Bucket name'")
-                            .subcommand(SubCommand::with_name("acl")
-                                .about("Sets the bucket ACLs")
-                                .subcommand(SubCommand::with_name("public-read")
-                                    .about("Allows the public to read the bucket content"))
-                                .subcommand(SubCommand::with_name("public-readwrite")
-                                    .about("Allows the public to read/write the bucket content"))
-                                .subcommand(SubCommand::with_name("public-rw")
-                                    .about("Allows the public to read/write the bucket content"))
-                                .subcommand(SubCommand::with_name("private")
-                                    .about("Sets the bucket content to private")))))
-                    .subcommand(SubCommand::with_name("object")
-                        .about("Perform all object specific operations")
-                        .subcommand(SubCommand::with_name("delete")
-                            .about("Delete operation for objects")
-                            .arg_from_usage("[name] 'Object name'"))
-                        .subcommand(SubCommand::with_name("get")
-                            .arg_from_usage("[bucket] 'Bucket name.'")
-                            .arg_from_usage("[name] 'Object name.'")
-                            .subcommand(SubCommand::with_name("acl"))
-                                .about("Returns the object ACLs"))
-                        .subcommand(SubCommand::with_name("put")
-                            .about("Put operation for objects")
-                            .arg_from_usage("[name] 'Object name'")
-                            .subcommand(SubCommand::with_name("acl")
-                                .about("Sets the Object ACLs")
-                                .subcommand(SubCommand::with_name("public-read")
-                                    .about("Allows the public to read the object"))
-                                .subcommand(SubCommand::with_name("public-readwrite")
-                                    .about("Allows the public to read/write the object"))
-                                .subcommand(SubCommand::with_name("public-rw")
-                                    .about("Allows the public to read/write the object"))
-                                .subcommand(SubCommand::with_name("private")
-                                    .about("Sets the object to private")))))
-                    .subcommand(SubCommand::with_name("endpoint")
-                        .about("Specify the S3 endpoint")
-                        .arg_from_usage("[url] '(Optional) - Endpoint for the S3 interface'"))
-                    .get_matches();
+    let version = format!("v{}", crate_version!());
+    let mut home: PathBuf;
+    // Get $HOME directory and set the default config. Let the CLI override the default.
+    match env::home_dir() {
+        Some(path) => {
+            home = path;
+            home.push(".s3lsio/config");
+        },
+        None => {home = PathBuf::new()},
+    }
+
+    // NOTE: If the CLI info passed in does not meet the requirements then build_cli will panic!
+    let matches = cli::build_cli(home.to_str().unwrap_or(""), &version).get_matches();
 
     // NOTE: Get parameters or config for region, signature etc
+    // Safe to unwrap since a default value is passed in. If a panic occurs then the environment
+    // does not support a home directory.
+    let config = matches.value_of("config").unwrap();
+    let region = match matches.value_of("region").unwrap().to_string().to_lowercase().as_ref() {
+        "useast1" => Region::UsEast1,
+        "uswest1" => Region::UsWest1,
+        "uswest2" => Region::UsWest2,
+        "cnnorth1" => Region::CnNorth1,
+        "eucentral1" => Region::EuCentral1,
+        "euwest1" => Region::EuWest1,
+        "saeast1" => Region::SaEast1,
+        "apnortheast1" => Region::ApNortheast1,
+        "apnortheast2" => Region::ApNortheast2,
+        "apsouth1" => Region::ApSouth1,
+        "apsoutheast1" => Region::ApSoutheast1,
+        "apsoutheast2" => Region::ApSoutheast2,
+        _ => Region::UsEast1,
+    };
+
+    // Option so None will be return if nothing is passed in.
+    let ep = matches.value_of("endpoint");
+    let proxy = matches.value_of("proxy");
+    let output = match matches.value_of("output").unwrap().to_string().to_lowercase().as_ref() {
+        "json" => OutputFormat::JSON,
+        "pretty-json" => OutputFormat::PrettyJSON,
+        "plain" => OutputFormat::Plain,
+        "serialize" => OutputFormat::Serialize,
+        _ => OutputFormat::PrettyJSON,
+    };
+    let output_color = match matches.value_of("output-color").unwrap().to_string().to_lowercase().as_ref() {
+        "green" => term::color::GREEN,
+        "red" => term::color::RED,
+        "blue" => term::color::BLUE,
+        "yellow" => term::color::YELLOW,
+        "white" => term::color::WHITE,
+        _ => term::color::GREEN,
+    };
+
     let provider = DefaultCredentialsProvider::new(None).unwrap();
 
     let endpoint = Endpoint::new(
-                            Region::UsEast1,
-                            Signature::V2,
-                            None,
-                            None,
-                            None);
+                            region,
+                            if matches.value_of("signature").unwrap() == "V2" {Signature::V2} else {Signature::V4},
+                            if ep.is_some() {Some(Url::parse(ep.unwrap()).unwrap())} else {None},
+                            if proxy.is_some() {Some(Url::parse(proxy.unwrap()).unwrap())} else {None},
+                            Some(format!("s3lsio - {}", version)));
 
     let mut s3client = S3Client::new(
                             provider,
@@ -187,8 +180,9 @@ fn main() {
     let mut client = Client{s3client: &mut s3client,
                             error: Error{format: OutputFormat::Serialize,
                                          color: term::color::RED},
-                            output: Output{format: OutputFormat::Plain,
-                                         color: term::color::GREEN}};
+                            output: Output{format: output,
+                                         color: output_color},
+                            is_default_config: config == home.to_str().unwrap()};
 
     // Check which subcomamnd the user ran...
     let res = match matches.subcommand() {

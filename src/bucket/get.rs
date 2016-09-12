@@ -21,6 +21,8 @@
 //! All GET requests are handled in this module.
 //!
 
+use rustc_serialize::json;
+
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
@@ -32,6 +34,7 @@ use aws_sdk_rust::aws::s3::object::ListObjectsRequest;
 use term;
 use Client;
 use Output;
+use OutputFormat;
 use util::*;
 
 /// All GET requests pass through this function.
@@ -44,7 +47,18 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
         ("acl", _) => {
             // Will bubble error up via try!
             let acl = try!(get_bucket_acl(bucket, client));
-            let output = print_acl_output(&acl, &client.output);
+            match client.output.format {
+                OutputFormat::Plain => {
+                    // Could have already been serialized before being passed to this function.
+                    println_color!(client.output.color, "{:#?}", acl);
+                },
+                OutputFormat::JSON => {
+                    println_color!(client.output.color, "{}", json::as_pretty_json(&acl));
+                },
+                OutputFormat::None => {},
+                _ => println!("error"),
+            }
+
         },
         ("list", _) => {
             // Will bubble error up via try!
