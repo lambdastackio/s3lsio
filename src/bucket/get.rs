@@ -61,7 +61,6 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
                 OutputFormat::None => {},
                 e @ _ => println!("Error: Format - {:#?}", e),
             }
-
         },
         ("list", _) => {
             // Will bubble error up via try!
@@ -84,8 +83,23 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
 fn get_buckets_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client: &Client<P,D>) -> Result<(), S3Error> {
     match client.s3client.list_buckets() {
       Ok(output) => {
-          let format = format!("{:#?}", output);
-          print_output(&client.output, &format);
+          //let format = format!("{:#?}", output);
+          //print_output(&client.output, &format);
+
+          match client.output.format {
+              OutputFormat::Plain => {
+                  // Could have already been serialized before being passed to this function.
+                  println_color!(client.output.color, "{:#?}", output);
+              },
+              OutputFormat::JSON => {
+                  println_color!(client.output.color, "{}", json::encode(&output).unwrap_or("{}".to_string()));
+              },
+              OutputFormat::PrettyJSON => {
+                  println_color!(client.output.color, "{}", json::as_pretty_json(&output));
+              },
+              OutputFormat::None => {},
+              e @ _ => println!("Error: Format - {:#?}", e),
+          }
           Ok(())
       }
       Err(error) => {
