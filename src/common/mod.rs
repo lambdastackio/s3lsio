@@ -17,6 +17,8 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 
+pub mod progress;
+
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;

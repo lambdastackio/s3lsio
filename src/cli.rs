@@ -13,18 +13,19 @@
 // limitations under the License.
 //
 
-use std::env;
-use std::path::PathBuf;
+use clap::{App, Arg, SubCommand};
 
-use clap::{App, Arg, SubCommand, AppSettings};
-
-pub fn build_cli<'a>(home: &'a str, version: &'a str) -> App<'a, 'a> {
-    App::new("s3lsio")
+pub fn build_cli<'a>(app: &str, home: &'a str, version: &'a str) -> App<'a, 'a> {
+    App::new(app)
         .about("S3 Client Utility that can access AWS S3, Ceph or any third party S3 enable environment")
         .author("Chris Jones <chris.jones@lambdastack.io>")
         .version(version)
-        .setting(AppSettings::SubcommandRequired)
+        //.setting(AppSettings::SubcommandRequired)
         .after_help("For more information about a specific command, try `s3lsio <command> --help`\nSource code for s3lsio available at: https://github.com/lambdastackio/s3lsio")
+        .arg(Arg::with_name("generate-bash-completions")
+                   .short("g")
+                   .long("generate-bash-completions")
+                   .help("Outputs bash completions"))
         .arg(Arg::with_name("config")
                    .short("c")
                    .long("config")
@@ -58,6 +59,10 @@ pub fn build_cli<'a>(home: &'a str, version: &'a str) -> App<'a, 'a> {
                    .value_name("URL:<port>")
                    .help("Sets a custom proxy URL:<port>. Default is to ready http(s)_proxy")
                    .takes_value(true))
+       .arg(Arg::with_name("quiet")
+                   .short("q")
+                   .long("quiet")
+                   .help("No output is produced"))
        .arg(Arg::with_name("region")
                    .short("r")
                    .long("region")

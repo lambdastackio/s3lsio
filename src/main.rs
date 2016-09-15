@@ -13,7 +13,7 @@
 // limitations under the License.
 //
 
-#![allow(unused_imports)]
+// #![allow(unused_imports)]
 
 // NOTE: This attribute only needs to be set once.
 #![doc(html_logo_url = "https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
@@ -32,20 +32,21 @@ extern crate log;
 extern crate env_logger;
 #[macro_use]
 extern crate clap;
+extern crate pbr;
 extern crate unicase;
 
-use std::io::{self, Write};
+use std::io::{self};
 use std::env;
 use std::path::PathBuf;
 
-use clap::{App, Arg, SubCommand, AppSettings};
+use clap::{Shell};
 use url::Url;
 
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::s3::endpoint::*;
 use aws_sdk_rust::aws::s3::s3client::S3Client;
 use aws_sdk_rust::aws::common::region::Region;
-use aws_sdk_rust::aws::common::credentials::{DefaultCredentialsProvider, AwsCredentialsProvider};
+use aws_sdk_rust::aws::common::credentials::{AwsCredentialsProvider, DefaultCredentialsProvider};
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 
 /// Allows you to set the output type for stderr and stdout.
@@ -93,12 +94,13 @@ pub struct Output {
 /// Note: Could also specify 'where' P:... D:... instead.
 ///
 pub struct Client<'a, P: 'a, D: 'a>
-        where P: AwsCredentialsProvider,
-              D: DispatchSignedRequest,
+    where P: AwsCredentialsProvider,
+          D: DispatchSignedRequest,
 {
     pub s3client: &'a mut S3Client<P, D>,
     pub error: Error,
     pub output: Output,
+    pub is_quiet: bool,
     pub is_default_config: bool,
 }
 
@@ -109,6 +111,9 @@ mod common;
 mod cli;
 
 fn main() {
+    // Gets overridden by cli option
+    let mut is_quiet: bool = false;
+
     env_logger::init().unwrap();
 
     let version = format!("v{}", crate_version!());
@@ -119,11 +124,22 @@ fn main() {
             home = path;
             home.push(".s3lsio/config");
         },
-        None => {home = PathBuf::new()},
+        None => home = PathBuf::new(),
     }
 
     // NOTE: If the CLI info passed in does not meet the requirements then build_cli will panic!
-    let matches = cli::build_cli(home.to_str().unwrap_or(""), &version).get_matches();
+    let matches = cli::build_cli("s3lsio", home.to_str().unwrap_or(""), &version).get_matches();
+
+    if matches.is_present("generate-bash-completions") {
+        cli::build_cli("s3lsio", home.to_str().unwrap_or(""), &version)
+            .gen_completions_to("s3lsio", Shell::Bash, &mut io::stdout());
+        ::std::process::exit(0);
+    }
+
+    // If the -q or --quiet flag was passed then shut off all output
+    if matches.is_present("quiet") {
+        is_quiet = true;
+    }
 
     // NOTE: Get parameters or config for region, signature etc
     // Safe to unwrap since a default value is passed in. If a panic occurs then the environment
@@ -166,36 +182,52 @@ fn main() {
 
     let provider = DefaultCredentialsProvider::new(None).unwrap();
 
-    let endpoint = Endpoint::new(
-                            region,
-                            if matches.value_of("signature").unwrap() == "V2" {Signature::V2} else {Signature::V4},
-                            if ep.is_some() {Some(Url::parse(ep.unwrap()).unwrap())} else {None},
-                            if proxy.is_some() {Some(Url::parse(proxy.unwrap()).unwrap())} else {None},
-                            Some(format!("s3lsio - {}", version)));
+    let endpoint = Endpoint::new(region,
+                                 if matches.value_of("signature").unwrap() == "V2" {
+                                     Signature::V2
+                                 } else {
+                                     Signature::V4
+                                 },
+                                 if ep.is_some() {
+                                     Some(Url::parse(ep.unwrap()).unwrap())
+                                 } else {
+                                     None
+                                 },
+                                 if proxy.is_some() {
+                                     Some(Url::parse(proxy.unwrap()).unwrap())
+                                 } else {
+                                     None
+                                 },
+                                 Some(format!("s3lsio - {}", version)));
 
-    let mut s3client = S3Client::new(
-                            provider,
-                            endpoint);
+    let mut s3client = S3Client::new(provider, endpoint);
 
-    let mut client = Client{s3client: &mut s3client,
-                            error: Error{format: OutputFormat::Serialize,
-                                         color: term::color::RED},
-                            output: Output{format: output,
-                                         color: output_color},
-                            is_default_config: config == home.to_str().unwrap()};
+    let mut client = Client {
+        s3client: &mut s3client,
+        error: Error {
+            format: OutputFormat::Serialize,
+            color: term::color::RED,
+        },
+        output: Output {
+            format: output,
+            color: output_color,
+        },
+        is_quiet: is_quiet,
+        is_default_config: config == home.to_str().unwrap(),
+    };
 
     // Check which subcomamnd the user ran...
     let res = match matches.subcommand() {
         ("bucket", Some(sub_matches)) => bucket::commands(sub_matches, &mut client),
         ("object", Some(sub_matches)) => object::commands(sub_matches, &mut client),
         (e, _) => {
-            println!("{}", e);
+            println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
             Err(S3Error::new("incorrect request"))
         },
     };
 
     if let Err(e) = res {
-        writeln!(&mut io::stderr(), "An error occured:\n{}", e).ok();
+        println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
         ::std::process::exit(1);
     }
 }
