@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
 
 #![allow(unused_imports)]
 
@@ -34,7 +33,7 @@ pub fn print_error(format: &Error, out: &str) {
             println_color!(error.color, "{}", out);
         },
         OutputFormat::None => {},
-        _ => println!("error"),
+        _ => println_color!(error.color, "error"),
     }
 }
 
@@ -43,9 +42,9 @@ pub fn print_output(format: &Output, out: &str) {
     match output.format {
         OutputFormat::Plain => {
             // Could have already been serialized before being passed to this function.
-            println_color!(output.color, "{}", out);
+            println_color_quiet!(false, output.color, "{}", out);
         },
         OutputFormat::None => {},
-        _ => println!("error"),
+        _ => println_color_quiet!(false, output.color, "error"),
     }
 }

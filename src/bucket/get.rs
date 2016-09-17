@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
 
 #![allow(unused_imports)]
 #![allow(unused_variables)]
@@ -50,16 +49,16 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
             match client.output.format {
                 OutputFormat::Plain => {
                     // Could have already been serialized before being passed to this function.
-                    println_color!(client.output.color, "{:#?}", acl);
+                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", acl);
                 },
                 OutputFormat::JSON => {
-                    println_color!(client.output.color, "{}", json::encode(&acl).unwrap_or("{}".to_string()));
+                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::encode(&acl).unwrap_or("{}".to_string()));
                 },
                 OutputFormat::PrettyJSON => {
-                    println_color!(client.output.color, "{}", json::as_pretty_json(&acl));
+                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&acl));
                 },
                 OutputFormat::None => {},
-                e @ _ => println!("Error: Format - {:#?}", e),
+                e @ _ => println_color!(term::color::RED, "Error: Format - {:#?}", e),
             }
         },
         ("list", _) => {
@@ -89,16 +88,16 @@ fn get_buckets_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client:
           match client.output.format {
               OutputFormat::Plain => {
                   // Could have already been serialized before being passed to this function.
-                  println_color!(client.output.color, "{:#?}", output);
+                  println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
               },
               OutputFormat::JSON => {
-                  println_color!(client.output.color, "{}", json::encode(&output).unwrap_or("{}".to_string()));
+                  println_color_quiet!(client.is_quiet, client.output.color, "{}", json::encode(&output).unwrap_or("{}".to_string()));
               },
               OutputFormat::PrettyJSON => {
-                  println_color!(client.output.color, "{}", json::as_pretty_json(&output));
+                  println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
               },
               OutputFormat::None => {},
-              e @ _ => println!("Error: Format - {:#?}", e),
+              e @ _ => println_color_quiet!(client.is_quiet, client.error.color, "Error: Format - {:#?}", e),
           }
           Ok(())
       }

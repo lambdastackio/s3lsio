@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
 
 // #![allow(unused_imports)]
 
@@ -35,7 +34,7 @@ extern crate clap;
 extern crate pbr;
 extern crate unicase;
 
-use std::io::{self};
+use std::io::{self, Write};
 use std::env;
 use std::path::PathBuf;
 
@@ -48,6 +47,8 @@ use aws_sdk_rust::aws::s3::s3client::S3Client;
 use aws_sdk_rust::aws::common::region::Region;
 use aws_sdk_rust::aws::common::credentials::{AwsCredentialsProvider, DefaultCredentialsProvider};
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
+
+use common::progress::ProgressBar;
 
 /// Allows you to set the output type for stderr and stdout.
 ///
@@ -93,15 +94,17 @@ pub struct Output {
 /// Example: fn whatever_function<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client: &mut Client<P,D>)
 /// Note: Could also specify 'where' P:... D:... instead.
 ///
-pub struct Client<'a, P: 'a, D: 'a>
+pub struct Client<'a, P: 'a, D: 'a> //, T>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
+          //T: Write,
 {
     pub s3client: &'a mut S3Client<P, D>,
     pub error: Error,
     pub output: Output,
     pub is_quiet: bool,
     pub is_default_config: bool,
+    //pub pbr: ProgressBar<T>,
 }
 
 mod bucket;

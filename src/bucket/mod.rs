@@ -11,10 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
 
 #![allow(unused_imports)]
 
+use term;
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
@@ -45,8 +45,8 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
         },
         ("delete", Some(sub_matches)) => delete::commands(sub_matches, client),
         (e, _) => {
-                let error = format!("unsupported command {}- available commands are get, put, delete", e);
-                println!("{}", error);
+                let error = format!("unsupported command {} - available commands are get, put, delete", e);
+                println_color!(term::color::RED, "{}", error);
                 Ok(())
         },
     };

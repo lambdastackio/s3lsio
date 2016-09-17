@@ -16,6 +16,8 @@
 #![allow(unused_imports)]
 
 use clap::ArgMatches;
+use term;
+
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
@@ -46,7 +48,7 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
         ("delete", Some(sub_matches)) => delete::commands(sub_matches, client),
         (e, _) => {
             let error = format!("incorrect or missing request {}", e);
-            println!("{}", error);
+            println_color_quiet!(client.is_quiet, term::color::RED, "{}", error);
             Err(S3Error::new(error))
         },
     };

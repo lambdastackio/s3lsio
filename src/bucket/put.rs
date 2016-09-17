@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
 
 #![allow(unused_imports)]
 #![allow(unused_variables)]
@@ -46,7 +45,7 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
                 ("public-rw", _) => acl = CannedAcl::PublicReadWrite,
                 ("public-readwrite", _) => acl = CannedAcl::PublicReadWrite,
                 ("private", _) => acl = CannedAcl::Private,
-                (e,_) => println!("Something {:?}", e),
+                (e,_) => println_color!(term::color::RED, "Something {:?}", e),
             }
 
             let mut bucket_acl = PutBucketAclRequest::default();
