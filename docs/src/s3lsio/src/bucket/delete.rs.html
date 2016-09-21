@@ -73,6 +73,9 @@
 <span id="29">29</span>
 <span id="30">30</span>
 <span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -98,8 +101,11 @@
 
 <span class='kw'>use</span> <span class='ident'>Client</span>;
 
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>commands</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>AwsCredentialsProvider</span>, <span class='ident'>D</span>: <span class='ident'>DispatchSignedRequest</span><span class='op'>&gt;</span>(<span class='ident'>matches</span>: <span class='kw-2'>&amp;</span><span class='ident'>ArgMatches</span>, <span class='ident'>client</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Client</span><span class='op'>&lt;</span><span class='ident'>P</span>,<span class='ident'>D</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>S3Error</span><span class='op'>&gt;</span> {
-    <span class='comment'>//println!(&quot;Bucket-get -- get::commands::{:#?}&quot;, matches);</span>
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>commands</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>D</span><span class='op'>&gt;</span>(<span class='ident'>matches</span>: <span class='kw-2'>&amp;</span><span class='ident'>ArgMatches</span>,
+                      <span class='ident'>client</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Client</span><span class='op'>&lt;</span><span class='ident'>P</span>,<span class='ident'>D</span><span class='op'>&gt;</span>)
+                      <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>S3Error</span><span class='op'>&gt;</span>
+                      <span class='kw'>where</span> <span class='ident'>P</span>: <span class='ident'>AwsCredentialsProvider</span>,
+                            <span class='ident'>D</span>: <span class='ident'>DispatchSignedRequest</span> {
     <span class='kw'>let</span> <span class='ident'>bucket</span> <span class='op'>=</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;name&quot;</span>).<span class='ident'>unwrap_or</span>(<span class='string'>&quot;&quot;</span>);
     <span class='macro'>println</span><span class='macro'>!</span>(<span class='string'>&quot;{:#?}&quot;</span>, <span class='ident'>matches</span>);
 

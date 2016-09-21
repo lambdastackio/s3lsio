@@ -97,6 +97,9 @@
 <span id="53">53</span>
 <span id="54">54</span>
 <span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -113,6 +116,7 @@
 <span class='comment'>// limitations under the License.</span>
 
 <span class='attribute'>#<span class='op'>!</span>[<span class='ident'>allow</span>(<span class='ident'>unused_imports</span>)]</span>
+<span class='attribute'>#<span class='op'>!</span>[<span class='ident'>allow</span>(<span class='ident'>unused_must_use</span>)]</span>
 
 <span class='kw'>use</span> <span class='ident'>term</span>;
 <span class='kw'>use</span> <span class='ident'>clap</span>::<span class='ident'>ArgMatches</span>;
@@ -127,9 +131,11 @@
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>delete</span>;
 
 <span class='doccomment'>/// All bucket commands are passed through this function.</span>
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>commands</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>AwsCredentialsProvider</span>, <span class='ident'>D</span>: <span class='ident'>DispatchSignedRequest</span><span class='op'>&gt;</span>(<span class='ident'>matches</span>: <span class='kw-2'>&amp;</span><span class='ident'>ArgMatches</span>, <span class='ident'>client</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Client</span><span class='op'>&lt;</span><span class='ident'>P</span>,<span class='ident'>D</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>S3Error</span><span class='op'>&gt;</span> {
-    <span class='comment'>//println!(&quot;Bucket -- {:#?}&quot;, matches);</span>
-
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>commands</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>D</span><span class='op'>&gt;</span>(<span class='ident'>matches</span>: <span class='kw-2'>&amp;</span><span class='ident'>ArgMatches</span>,
+                      <span class='ident'>client</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Client</span><span class='op'>&lt;</span><span class='ident'>P</span>,<span class='ident'>D</span><span class='op'>&gt;</span>)
+                      <span class='op'>-&gt;</span> <span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(), <span class='ident'>S3Error</span><span class='op'>&gt;</span>
+                      <span class='kw'>where</span> <span class='ident'>P</span>: <span class='ident'>AwsCredentialsProvider</span>,
+                            <span class='ident'>D</span>: <span class='ident'>DispatchSignedRequest</span> {
     <span class='kw'>match</span> <span class='ident'>matches</span>.<span class='ident'>subcommand</span>() {
         (<span class='string'>&quot;get&quot;</span>, <span class='prelude-val'>Some</span>(<span class='ident'>sub_matches</span>)) <span class='op'>=&gt;</span> {
             <span class='kw'>match</span> <span class='ident'>get</span>::<span class='ident'>commands</span>(<span class='ident'>sub_matches</span>, <span class='ident'>client</span>) {

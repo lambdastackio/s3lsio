@@ -278,6 +278,7 @@
 <span id="234">234</span>
 <span id="235">235</span>
 <span id="236">236</span>
+<span id="237">237</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -293,7 +294,7 @@
 <span class='comment'>// See the License for the specific language governing permissions and</span>
 <span class='comment'>// limitations under the License.</span>
 
-<span class='comment'>// #![allow(unused_imports)]</span>
+<span class='attribute'>#<span class='op'>!</span>[<span class='ident'>allow</span>(<span class='ident'>unused_imports</span>)]</span>
 
 <span class='comment'>// NOTE: This attribute only needs to be set once.</span>
 <span class='attribute'>#<span class='op'>!</span>[<span class='ident'>doc</span>(<span class='ident'>html_logo_url</span> <span class='op'>=</span> <span class='string'>&quot;https://lambdastackio.github.io/static/images/lambdastack-200x200.png&quot;</span>,
@@ -506,12 +507,13 @@
         (<span class='string'>&quot;object&quot;</span>, <span class='prelude-val'>Some</span>(<span class='ident'>sub_matches</span>)) <span class='op'>=&gt;</span> <span class='ident'>object</span>::<span class='ident'>commands</span>(<span class='ident'>sub_matches</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>client</span>),
         (<span class='ident'>e</span>, _) <span class='op'>=&gt;</span> {
             <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>term</span>::<span class='ident'>color</span>::<span class='ident'>RED</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>e</span>);
-            <span class='prelude-val'>Err</span>(<span class='ident'>S3Error</span>::<span class='ident'>new</span>(<span class='string'>&quot;incorrect request&quot;</span>))
+            <span class='prelude-val'>Err</span>(<span class='ident'>S3Error</span>::<span class='ident'>new</span>(<span class='string'>&quot;A valid instruction is required&quot;</span>))
         },
     };
 
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Err</span>(<span class='ident'>e</span>) <span class='op'>=</span> <span class='ident'>res</span> {
         <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>term</span>::<span class='ident'>color</span>::<span class='ident'>RED</span>, <span class='string'>&quot;An error occured: {}&quot;</span>, <span class='ident'>e</span>);
+        <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>term</span>::<span class='ident'>color</span>::<span class='ident'>RED</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>matches</span>.<span class='ident'>usage</span>());
         ::<span class='ident'>std</span>::<span class='ident'>process</span>::<span class='ident'>exit</span>(<span class='number'>1</span>);
     }
 }

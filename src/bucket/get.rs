@@ -37,8 +37,11 @@ use OutputFormat;
 use util::*;
 
 /// All GET requests pass through this function.
-pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
-    //println!("Bucket-get -- get::commands::{:#?}", matches);
+pub fn commands<P, D>(matches: &ArgMatches,
+                      client: &mut Client<P,D>)
+                      -> Result<(), S3Error>
+                      where P: AwsCredentialsProvider,
+                            D: DispatchSignedRequest {
     let bucket = matches.value_of("name").unwrap_or("");
 
     match matches.subcommand() {
@@ -58,7 +61,7 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
                     println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&acl));
                 },
                 OutputFormat::None => {},
-                e @ _ => println_color!(term::color::RED, "Error: Format - {:#?}", e),
+                e @ _ => println_color_quiet!(client.is_quiet, client.error.color, "Error: Format - {:#?}", e),
             }
         },
         ("list", _) => {
@@ -71,7 +74,7 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
                 let output = get_bucket_list(bucket, client);
             } else {
                 let error = format!("incorrect or missing request {}", e);
-                println_color!(term::color::RED, "{}", error);
+                println_color_quiet!(client.is_quiet, client.error.color, "{:?}", error);
             }
         }
     }
@@ -79,12 +82,12 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
     Ok(())
 }
 
-fn get_buckets_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client: &Client<P,D>) -> Result<(), S3Error> {
+fn get_buckets_list<P, D>(client: &Client<P,D>)
+                          -> Result<(), S3Error>
+                          where P: AwsCredentialsProvider,
+                                D: DispatchSignedRequest {
     match client.s3client.list_buckets() {
       Ok(output) => {
-          //let format = format!("{:#?}", output);
-          //print_output(&client.output, &format);
-
           match client.output.format {
               OutputFormat::Plain => {
                   // Could have already been serialized before being passed to this function.
@@ -103,42 +106,47 @@ fn get_buckets_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client:
       }
       Err(error) => {
           let format = format!("{:#?}", error);
-          print_error(&client.error, &format);
           let error = S3Error::new(format);
+          println_color_quiet!(client.is_quiet, client.error.color, "{:?}", error);
           Err(error)
       }
     }
 }
 
-fn get_bucket_list<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucket: &str, client: &Client<P,D>) -> Result<(), S3Error> {
+fn get_bucket_list<P, D>(bucket: &str,
+                         client: &Client<P,D>)
+                         -> Result<(), S3Error>
+                         where P: AwsCredentialsProvider,
+                               D: DispatchSignedRequest {
     let mut list_objects = ListObjectsRequest::default();
     list_objects.bucket = bucket.to_string();
 
     match client.s3client.list_objects(&list_objects) {
       Ok(output) => {
-          let format = format!("{:#?}", output);
-          print_output(&client.output, &format);
+          println_color_quiet!(client.is_quiet, client.output.color, "{:?}", output);
           Ok(())
       }
       Err(error) => {
           let format = format!("{:#?}", error);
-          print_error(&client.error, &format);
           let error = S3Error::new(format);
+          println_color_quiet!(client.is_quiet, client.error.color, "{:?}", error);
           Err(error)
       }
     }
 }
 
-pub fn get_bucket_acl<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucket: &str, client: &Client<P,D>) -> Result<AccessControlPolicy, S3Error> {
+pub fn get_bucket_acl<P, D>(bucket: &str,
+                            client: &Client<P,D>)
+                            -> Result<AccessControlPolicy, S3Error>
+                            where P: AwsCredentialsProvider,
+                                  D: DispatchSignedRequest {
     let mut get_bucket_acl = GetBucketAclRequest::default();
     get_bucket_acl.bucket = bucket.to_string();
 
     match client.s3client.get_bucket_acl(&get_bucket_acl) {
         Ok(acl) => Ok(acl),
         Err(e) => {
-            let format = format!("{:#?}", e);
-            println_color!(term::color::RED, "missing or incorrect bucket name");
-            print_error(&client.error, &format);
+            println_color_quiet!(client.is_quiet, client.error.color, "{:?}", e);
             Err(e)
         }
     }

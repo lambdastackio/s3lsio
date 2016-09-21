@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #![allow(unused_imports)]
+#![allow(unused_must_use)]
 
 use term;
 use clap::ArgMatches;
@@ -27,9 +28,11 @@ pub mod put;
 pub mod delete;
 
 /// All bucket commands are passed through this function.
-pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
-    //println!("Bucket -- {:#?}", matches);
-
+pub fn commands<P, D>(matches: &ArgMatches,
+                      client: &mut Client<P,D>)
+                      -> Result<(), S3Error>
+                      where P: AwsCredentialsProvider,
+                            D: DispatchSignedRequest {
     match matches.subcommand() {
         ("get", Some(sub_matches)) => {
             match get::commands(sub_matches, client) {

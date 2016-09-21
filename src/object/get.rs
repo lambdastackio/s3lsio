@@ -27,8 +27,11 @@ use Client;
 use Output;
 use util::*;
 
-pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
-    //println!("Bucket-get -- get::commands::{:#?}", matches);
+pub fn commands<P, D>(matches: &ArgMatches,
+                      client: &mut Client<P,D>)
+                      -> Result<(), S3Error>
+                      where P: AwsCredentialsProvider,
+                            D: DispatchSignedRequest {
     let bucket = matches.value_of("bucket").unwrap_or("");
     let object = matches.value_of("name").unwrap_or("");
 
@@ -36,7 +39,6 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
         /// acl command.
         ("acl", _) => {
             let acl = try!(get_object_acl(bucket, object, client));
-            let output = print_acl_output(&acl, &client.output);
         },
         (e,_) => {
             if e.is_empty() && bucket.is_empty() {
@@ -61,18 +63,14 @@ pub fn get_object_acl<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucke
     get_object_acl.key = object.to_string();
 
     match client.s3client.get_object_acl(&get_object_acl) {
-        Ok(acl) => Ok(acl),
+        Ok(acl) => {
+          println_color_quiet!(client.is_quiet, client.output.color, "{:?}", acl);
+          Ok(acl)
+        },
         Err(e) => {
             let format = format!("{:#?}", e);
-            println_color!(term::color::RED, "missing or incorrect bucket name or object name");
-            print_error(&client.error, &format);
+            println_color_quiet!(client.is_quiet, client.error.color, "{:?}", e);
             Err(e)
         }
     }
-}
-
-fn print_acl_output(acl: &AccessControlPolicy, output: &Output) -> Result<(), S3Error> {
-    println!("{:#?}", acl);
-
-    Ok(())
 }

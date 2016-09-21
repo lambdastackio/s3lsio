@@ -14,6 +14,7 @@
 //
 
 #![allow(unused_imports)]
+#![allow(unused_must_use)]
 
 use clap::ArgMatches;
 use term;
@@ -29,9 +30,11 @@ pub mod get;
 pub mod put;
 pub mod delete;
 
-pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
-    //println!("Object -- {:#?}", matches);
-
+pub fn commands<P, D>(matches: &ArgMatches,
+                      client: &mut Client<P,D>)
+                      -> Result<(), S3Error>
+                      where P: AwsCredentialsProvider,
+                            D: DispatchSignedRequest {
     match matches.subcommand() {
         ("get", Some(sub_matches)) => {
             match get::commands(sub_matches, client) {
@@ -53,13 +56,5 @@ pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &A
         },
     };
 
-/*
-    match matches.subcommand() {
-        ("get", Some(sub_matches)) => get::commands(sub_matches),
-        ("put", Some(sub_matches)) => put::commands(sub_matches),
-        ("delete", Some(sub_matches)) => delete::commands(sub_matches),
-        (_, _) => unreachable!(),
-    };
-*/
     Ok(())
 }

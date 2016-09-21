@@ -22,8 +22,11 @@ use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 
 use Client;
 
-pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
-    //println!("Bucket-get -- get::commands::{:#?}", matches);
+pub fn commands<P, D>(matches: &ArgMatches,
+                      client: &mut Client<P,D>)
+                      -> Result<(), S3Error>
+                      where P: AwsCredentialsProvider,
+                            D: DispatchSignedRequest {
     let bucket = matches.value_of("name").unwrap_or("");
     println!("{:#?}", matches);
 

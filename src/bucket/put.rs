@@ -14,6 +14,7 @@
 
 #![allow(unused_imports)]
 #![allow(unused_variables)]
+#![allow(unused_must_use)]
 
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
@@ -30,70 +31,70 @@ use util::*;
 use bucket::get::get_bucket_acl;
 
 /// All PUT requests pass through this function.
-pub fn commands<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
-    //println!("Bucket-put -- put::commands::{:#?}", matches);
+pub fn commands<P, D>(matches: &ArgMatches,
+                      client: &mut Client<P, D>)
+                      -> Result<(), S3Error>
+                      where P: AwsCredentialsProvider,
+                            D: DispatchSignedRequest {
     let bucket = matches.value_of("name").unwrap_or("");
 
     match matches.subcommand() {
         /// acl command.
         ("acl", Some(sub_matches)) => {
-            // Default to Private
-            let mut acl: CannedAcl = CannedAcl::Private;
-
-            match sub_matches.subcommand() {
-                ("public-read", _) => acl = CannedAcl::PublicRead,
-                ("public-rw", _) => acl = CannedAcl::PublicReadWrite,
-                ("public-readwrite", _) => acl = CannedAcl::PublicReadWrite,
-                ("private", _) => acl = CannedAcl::Private,
-                (e,_) => println_color!(term::color::RED, "Something {:?}", e),
-            }
-
-            let mut bucket_acl = PutBucketAclRequest::default();
-            bucket_acl.bucket = bucket.to_string();
-
-            // get acl option...
-            bucket_acl.acl = Some(acl);
-
-            match put_bucket_acl(bucket, &bucket_acl, client) {
-                Ok(_) => {
-                    let acl = get_bucket_acl(bucket, client);
-                    if let Ok(acl) = acl {
-                        let output = print_acl_output(&acl, &client.output);
-                    }
-                },
-                Err(_) => {},
-            }
-        },
-        (e,_) => {
+            let result = put_bucket_acl(sub_matches, bucket, client);
+          },
+        (e, _) => {
             if e.is_empty() && bucket.is_empty() {
 
                 println!("what?");
 
             } else {
                 let error = format!("incorrect or missing request {}", e);
-                println_color!(term::color::RED, "{}", error);
+                println_color_quiet!(client.is_quiet, term::color::RED, "{}", error);
             }
-        }
+        },
     }
 
     Ok(())
 }
 
-fn put_bucket_acl<P: AwsCredentialsProvider, D: DispatchSignedRequest>(bucket: &str, acl: &PutBucketAclRequest, client: &Client<P,D>) -> Result<(), S3Error> {
-    match client.s3client.put_bucket_acl(&acl) {
+fn put_bucket_acl<P, D>(sub_matches: &ArgMatches,
+                        bucket: &str,
+                        client: &Client<P, D>)
+                        -> Result<(), S3Error>
+                        where P: AwsCredentialsProvider,
+                              D: DispatchSignedRequest {
+
+    // Default to Private
+    let mut acl: CannedAcl = CannedAcl::Private;
+
+    match sub_matches.subcommand() {
+        ("public-read", _) => acl = CannedAcl::PublicRead,
+        ("public-rw", _) => acl = CannedAcl::PublicReadWrite,
+        ("public-readwrite", _) => acl = CannedAcl::PublicReadWrite,
+        ("private", _) => acl = CannedAcl::Private,
+        (e, _) => println_color_quiet!(client.is_quiet, client.error.color, "Something {:?}", e),
+    }
+
+    let mut bucket_acl = PutBucketAclRequest::default();
+    bucket_acl.bucket = bucket.to_string();
+
+    // get acl option...
+    bucket_acl.acl = Some(acl);
+
+    match client.s3client.put_bucket_acl(&bucket_acl) {
         Ok(val) => {
-            Ok(val)
+          let acl = get_bucket_acl(bucket, client);
+          if let Ok(acl) = acl {
+              println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", acl);
+          }
         },
         Err(e) => {
             let format = format!("{:#?}", e);
             print_error(&client.error, &format);
-            Err(e)
-        }
+            return Err(e)
+        },
     }
-}
-
-fn print_acl_output(acl: &AccessControlPolicy, output: &Output) -> Result<(), S3Error> {
-    println!("{:#?}", acl);
 
     Ok(())
 }

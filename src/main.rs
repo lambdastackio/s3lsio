@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #![allow(unused_imports)]
+#![allow(unused_imports)]
 
 // NOTE: This attribute only needs to be set once.
 #![doc(html_logo_url = "https://lambdastackio.github.io/static/images/lambdastack-200x200.png",
@@ -225,12 +225,13 @@ fn main() {
         ("object", Some(sub_matches)) => object::commands(sub_matches, &mut client),
         (e, _) => {
             println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
-            Err(S3Error::new("incorrect request"))
+            Err(S3Error::new("A valid instruction is required"))
         },
     };
 
     if let Err(e) = res {
         println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
+        println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
         ::std::process::exit(1);
     }
 }

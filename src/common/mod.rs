@@ -15,6 +15,7 @@
 // Common
 #![allow(unused_imports)]
 #![allow(unused_variables)]
+#![allow(unused_must_use)]
 
 pub mod progress;
 
@@ -26,7 +27,11 @@ use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 use Client;
 
 #[allow(dead_code)]
-pub fn common<P: AwsCredentialsProvider, D: DispatchSignedRequest>(matches: &ArgMatches, client: &mut Client<P,D>) -> Result<(), S3Error> {
+pub fn commands<P, D>(matches: &ArgMatches,
+                      client: &mut Client<P,D>)
+                      -> Result<(), S3Error>
+                      where P: AwsCredentialsProvider,
+                            D: DispatchSignedRequest {
 
     //println!("Common:: {:#?}", matches);
 
