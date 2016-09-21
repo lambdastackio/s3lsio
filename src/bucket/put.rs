@@ -25,9 +25,6 @@ use aws_sdk_rust::aws::s3::bucket::*;
 
 use term;
 use Client;
-use Output;
-use OutputFormat;
-use util::*;
 use bucket::get::get_bucket_acl;
 
 /// All PUT requests pass through this function.
@@ -43,6 +40,9 @@ pub fn commands<P, D>(matches: &ArgMatches,
         ("acl", Some(sub_matches)) => {
             let result = put_bucket_acl(sub_matches, bucket, client);
           },
+        ("versioning", Some(sub_matches)) => {
+            let result = put_bucket_versioning(sub_matches, bucket, client);
+        },
         (e, _) => {
             if e.is_empty() && bucket.is_empty() {
 
@@ -56,6 +56,34 @@ pub fn commands<P, D>(matches: &ArgMatches,
     }
 
     Ok(())
+}
+
+fn put_bucket_versioning<P, D>(sub_matches: &ArgMatches,
+                               bucket: &str,
+                               client: &Client<P, D>)
+                               -> Result<(), S3Error>
+                               where P: AwsCredentialsProvider,
+                                     D: DispatchSignedRequest {
+    let version = PutBucketVersioningRequest{
+        bucket: bucket.to_string(),
+        versioning_configuration: VersioningConfiguration {
+            status: "Enabled".to_string(),
+            mfa_delete: "".to_string(),
+        },
+        mfa: None,
+        content_md5: None,
+    };
+
+    match client.s3client.put_bucket_versioning(&version) {
+        Ok(()) => {
+          println_color_quiet!(client.is_quiet, client.output.color, "Success");
+          Ok(())
+        },
+        Err(e) => {
+          println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
+          Err(e)
+        },
+    }
 }
 
 fn put_bucket_acl<P, D>(sub_matches: &ArgMatches,
@@ -90,11 +118,10 @@ fn put_bucket_acl<P, D>(sub_matches: &ArgMatches,
           }
         },
         Err(e) => {
-            let format = format!("{:#?}", e);
-            print_error(&client.error, &format);
+            println_color_quiet!(client.is_quiet, client.error.color, "Something {:?}", e);
             return Err(e)
         },
     }
-
+    
     Ok(())
 }

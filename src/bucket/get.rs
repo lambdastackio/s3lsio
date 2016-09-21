@@ -34,7 +34,6 @@ use term;
 use Client;
 use Output;
 use OutputFormat;
-use util::*;
 
 /// All GET requests pass through this function.
 pub fn commands<P, D>(matches: &ArgMatches,
@@ -65,8 +64,10 @@ pub fn commands<P, D>(matches: &ArgMatches,
             }
         },
         ("list", _) => {
-            // Will bubble error up via try!
             let list = try!(get_buckets_list(client));
+        },
+        ("versioning", _) => {
+            let list = try!(get_bucket_versioning(bucket, client));
         },
         (e,_) => {
             if e.is_empty() && !bucket.is_empty(){
@@ -80,6 +81,25 @@ pub fn commands<P, D>(matches: &ArgMatches,
     }
 
     Ok(())
+}
+
+fn get_bucket_versioning<P, D>(bucket: &str,
+                               client: &Client<P,D>)
+                               -> Result<(), S3Error>
+                               where P: AwsCredentialsProvider,
+                                     D: DispatchSignedRequest {
+     let bucket_versioning = GetBucketVersioningRequest { bucket: bucket.to_string() };
+
+     match client.s3client.get_bucket_versioning(&bucket_versioning) {
+         Ok(version) => {
+           println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", version);
+           Ok(())
+         },
+         Err(e) => {
+           println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
+           Err(e)
+         },
+     }
 }
 
 fn get_buckets_list<P, D>(client: &Client<P,D>)

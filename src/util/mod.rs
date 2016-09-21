@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #![allow(unused_imports)]
+#![allow(dead_code)]
 
 extern crate num_cpus;
 

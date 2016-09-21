@@ -169,6 +169,10 @@
 <span id="125">125</span>
 <span id="126">126</span>
 <span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -259,7 +263,9 @@
                 .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;acl&quot;</span>)
                     .<span class='ident'>about</span>(<span class='string'>&quot;Returns the bucket ACLs&quot;</span>))
                 .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;list&quot;</span>)
-                    .<span class='ident'>about</span>(<span class='string'>&quot;Returns the list of buckets&quot;</span>)))
+                    .<span class='ident'>about</span>(<span class='string'>&quot;Returns the list of buckets&quot;</span>))
+                .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;versioning&quot;</span>)
+                    .<span class='ident'>about</span>(<span class='string'>&quot;Returns versioning&quot;</span>)))
             .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;put&quot;</span>)
                 .<span class='ident'>about</span>(<span class='string'>&quot;Put operation for bucket&quot;</span>)
                 .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Bucket name&#39;&quot;</span>)
@@ -272,7 +278,9 @@
                     .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;public-rw&quot;</span>)
                         .<span class='ident'>about</span>(<span class='string'>&quot;Allows the public to read/write the bucket content&quot;</span>))
                     .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;private&quot;</span>)
-                        .<span class='ident'>about</span>(<span class='string'>&quot;Sets the bucket content to private&quot;</span>)))))
+                        .<span class='ident'>about</span>(<span class='string'>&quot;Sets the bucket content to private&quot;</span>)))
+                .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;versioning&quot;</span>)
+                    .<span class='ident'>about</span>(<span class='string'>&quot;Enables versioning for a bucket&quot;</span>))))
        .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;object&quot;</span>)
             .<span class='ident'>about</span>(<span class='string'>&quot;Perform all object specific operations&quot;</span>)
             .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;delete&quot;</span>)
