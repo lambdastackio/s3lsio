@@ -13,7 +13,7 @@
     <link rel="stylesheet" type="text/css" href="../../../../main.css">
     
 
-    <link rel="shortcut icon" href="https://www.rust-lang.org/favicon.ico">
+    <link rel="shortcut icon" href="https://lambdastackio.github.io/static/images/favicon.ico">
     
 </head>
 <body class="rustdoc">
@@ -27,7 +27,7 @@
     
 
     <nav class="sidebar">
-        <a href='../../../../s3lsio/index.html'><img src='https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png' alt='logo' width='100'></a>
+        <a href='../../../../s3lsio/index.html'><img src='https://lambdastackio.github.io/static/images/lambdastack-200x200.png' alt='logo' width='100'></a>
         
     </nav>
 
@@ -111,10 +111,10 @@
 <span class='comment'>// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
 <span class='comment'>// See the License for the specific language governing permissions and</span>
 <span class='comment'>// limitations under the License.</span>
-<span class='comment'>//</span>
 
 <span class='attribute'>#<span class='op'>!</span>[<span class='ident'>allow</span>(<span class='ident'>unused_imports</span>)]</span>
 
+<span class='kw'>use</span> <span class='ident'>term</span>;
 <span class='kw'>use</span> <span class='ident'>clap</span>::<span class='ident'>ArgMatches</span>;
 <span class='kw'>use</span> <span class='ident'>aws_sdk_rust</span>::<span class='ident'>aws</span>::<span class='ident'>errors</span>::<span class='ident'>s3</span>::<span class='ident'>S3Error</span>;
 <span class='kw'>use</span> <span class='ident'>aws_sdk_rust</span>::<span class='ident'>aws</span>::<span class='ident'>common</span>::<span class='ident'>credentials</span>::<span class='ident'>AwsCredentialsProvider</span>;
@@ -145,8 +145,8 @@
         },
         (<span class='string'>&quot;delete&quot;</span>, <span class='prelude-val'>Some</span>(<span class='ident'>sub_matches</span>)) <span class='op'>=&gt;</span> <span class='ident'>delete</span>::<span class='ident'>commands</span>(<span class='ident'>sub_matches</span>, <span class='ident'>client</span>),
         (<span class='ident'>e</span>, _) <span class='op'>=&gt;</span> {
-                <span class='kw'>let</span> <span class='ident'>error</span> <span class='op'>=</span> <span class='macro'>format</span><span class='macro'>!</span>(<span class='string'>&quot;unsupported command {}- available commands are get, put, delete&quot;</span>, <span class='ident'>e</span>);
-                <span class='macro'>println</span><span class='macro'>!</span>(<span class='string'>&quot;{}&quot;</span>, <span class='ident'>error</span>);
+                <span class='kw'>let</span> <span class='ident'>error</span> <span class='op'>=</span> <span class='macro'>format</span><span class='macro'>!</span>(<span class='string'>&quot;unsupported command {} - available commands are get, put, delete&quot;</span>, <span class='ident'>e</span>);
+                <span class='macro'>println_color</span><span class='macro'>!</span>(<span class='ident'>term</span>::<span class='ident'>color</span>::<span class='ident'>RED</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>error</span>);
                 <span class='prelude-val'>Ok</span>(())
         },
     };

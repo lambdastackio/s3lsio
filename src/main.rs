@@ -15,8 +15,8 @@
 // #![allow(unused_imports)]
 
 // NOTE: This attribute only needs to be set once.
-#![doc(html_logo_url = "https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
-       html_favicon_url = "https://www.rust-lang.org/favicon.ico",
+#![doc(html_logo_url = "https://lambdastackio.github.io/static/images/lambdastack-200x200.png",
+       html_favicon_url = "https://lambdastackio.github.io/static/images/favicon.ico",
        html_root_url = "https://lambdastackio.github.io/s3lsio/s3lsio/index.html")]
 
 #[macro_use]

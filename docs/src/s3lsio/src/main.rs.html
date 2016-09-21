@@ -13,7 +13,7 @@
     <link rel="stylesheet" type="text/css" href="../../../main.css">
     
 
-    <link rel="shortcut icon" href="https://www.rust-lang.org/favicon.ico">
+    <link rel="shortcut icon" href="https://lambdastackio.github.io/static/images/favicon.ico">
     
 </head>
 <body class="rustdoc">
@@ -27,7 +27,7 @@
     
 
     <nav class="sidebar">
-        <a href='../../../s3lsio/index.html'><img src='https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png' alt='logo' width='100'></a>
+        <a href='../../../s3lsio/index.html'><img src='https://lambdastackio.github.io/static/images/lambdastack-200x200.png' alt='logo' width='100'></a>
         
     </nav>
 
@@ -274,6 +274,10 @@
 <span id="230">230</span>
 <span id="231">231</span>
 <span id="232">232</span>
+<span id="233">233</span>
+<span id="234">234</span>
+<span id="235">235</span>
+<span id="236">236</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -288,13 +292,12 @@
 <span class='comment'>// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
 <span class='comment'>// See the License for the specific language governing permissions and</span>
 <span class='comment'>// limitations under the License.</span>
-<span class='comment'>//</span>
 
 <span class='comment'>// #![allow(unused_imports)]</span>
 
 <span class='comment'>// NOTE: This attribute only needs to be set once.</span>
-<span class='attribute'>#<span class='op'>!</span>[<span class='ident'>doc</span>(<span class='ident'>html_logo_url</span> <span class='op'>=</span> <span class='string'>&quot;https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png&quot;</span>,
-       <span class='ident'>html_favicon_url</span> <span class='op'>=</span> <span class='string'>&quot;https://www.rust-lang.org/favicon.ico&quot;</span>,
+<span class='attribute'>#<span class='op'>!</span>[<span class='ident'>doc</span>(<span class='ident'>html_logo_url</span> <span class='op'>=</span> <span class='string'>&quot;https://lambdastackio.github.io/static/images/lambdastack-200x200.png&quot;</span>,
+       <span class='ident'>html_favicon_url</span> <span class='op'>=</span> <span class='string'>&quot;https://lambdastackio.github.io/static/images/favicon.ico&quot;</span>,
        <span class='ident'>html_root_url</span> <span class='op'>=</span> <span class='string'>&quot;https://lambdastackio.github.io/s3lsio/s3lsio/index.html&quot;</span>)]</span>
 
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
@@ -309,13 +312,14 @@
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>env_logger</span>;
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>clap</span>;
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>pbr</span>;
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>unicase</span>;
 
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>::{<span class='self'>self</span>, <span class='ident'>Write</span>};
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>env</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>path</span>::<span class='ident'>PathBuf</span>;
 
-<span class='kw'>use</span> <span class='ident'>clap</span>::{<span class='ident'>App</span>, <span class='ident'>AppSettings</span>, <span class='ident'>Arg</span>, <span class='ident'>Shell</span>, <span class='ident'>SubCommand</span>};
+<span class='kw'>use</span> <span class='ident'>clap</span>::{<span class='ident'>Shell</span>};
 <span class='kw'>use</span> <span class='ident'>url</span>::<span class='ident'>Url</span>;
 
 <span class='kw'>use</span> <span class='ident'>aws_sdk_rust</span>::<span class='ident'>aws</span>::<span class='ident'>errors</span>::<span class='ident'>s3</span>::<span class='ident'>S3Error</span>;
@@ -324,6 +328,8 @@
 <span class='kw'>use</span> <span class='ident'>aws_sdk_rust</span>::<span class='ident'>aws</span>::<span class='ident'>common</span>::<span class='ident'>region</span>::<span class='ident'>Region</span>;
 <span class='kw'>use</span> <span class='ident'>aws_sdk_rust</span>::<span class='ident'>aws</span>::<span class='ident'>common</span>::<span class='ident'>credentials</span>::{<span class='ident'>AwsCredentialsProvider</span>, <span class='ident'>DefaultCredentialsProvider</span>};
 <span class='kw'>use</span> <span class='ident'>aws_sdk_rust</span>::<span class='ident'>aws</span>::<span class='ident'>common</span>::<span class='ident'>request</span>::<span class='ident'>DispatchSignedRequest</span>;
+
+<span class='kw'>use</span> <span class='ident'>common</span>::<span class='ident'>progress</span>::<span class='ident'>ProgressBar</span>;
 
 <span class='doccomment'>/// Allows you to set the output type for stderr and stdout.</span>
 <span class='doccomment'>///</span>
@@ -369,15 +375,17 @@
 <span class='doccomment'>/// Example: fn whatever_function&lt;P: AwsCredentialsProvider, D: DispatchSignedRequest&gt;(client: &amp;mut Client&lt;P,D&gt;)</span>
 <span class='doccomment'>/// Note: Could also specify &#39;where&#39; P:... D:... instead.</span>
 <span class='doccomment'>///</span>
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Client</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>P</span>: <span class='lifetime'>&#39;a</span>, <span class='ident'>D</span>: <span class='lifetime'>&#39;a</span><span class='op'>&gt;</span>
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Client</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>P</span>: <span class='lifetime'>&#39;a</span>, <span class='ident'>D</span>: <span class='lifetime'>&#39;a</span><span class='op'>&gt;</span> <span class='comment'>//, T&gt;</span>
     <span class='kw'>where</span> <span class='ident'>P</span>: <span class='ident'>AwsCredentialsProvider</span>,
           <span class='ident'>D</span>: <span class='ident'>DispatchSignedRequest</span>,
+          <span class='comment'>//T: Write,</span>
 {
     <span class='kw'>pub</span> <span class='ident'>s3client</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='kw-2'>mut</span> <span class='ident'>S3Client</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>D</span><span class='op'>&gt;</span>,
     <span class='kw'>pub</span> <span class='ident'>error</span>: <span class='ident'>Error</span>,
     <span class='kw'>pub</span> <span class='ident'>output</span>: <span class='ident'>Output</span>,
     <span class='kw'>pub</span> <span class='ident'>is_quiet</span>: <span class='ident'>bool</span>,
     <span class='kw'>pub</span> <span class='ident'>is_default_config</span>: <span class='ident'>bool</span>,
+    <span class='comment'>//pub pbr: ProgressBar&lt;T&gt;,</span>
 }
 
 <span class='kw'>mod</span> <span class='ident'>bucket</span>;

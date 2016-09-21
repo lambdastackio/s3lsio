@@ -13,7 +13,7 @@
     <link rel="stylesheet" type="text/css" href="../../../../main.css">
     
 
-    <link rel="shortcut icon" href="https://www.rust-lang.org/favicon.ico">
+    <link rel="shortcut icon" href="https://lambdastackio.github.io/static/images/favicon.ico">
     
 </head>
 <body class="rustdoc">
@@ -27,7 +27,7 @@
     
 
     <nav class="sidebar">
-        <a href='../../../../s3lsio/index.html'><img src='https://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png' alt='logo' width='100'></a>
+        <a href='../../../../s3lsio/index.html'><img src='https://lambdastackio.github.io/static/images/lambdastack-200x200.png' alt='logo' width='100'></a>
         
     </nav>
 
@@ -187,7 +187,6 @@
 <span id="143">143</span>
 <span id="144">144</span>
 <span id="145">145</span>
-<span id="146">146</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -202,7 +201,6 @@
 <span class='comment'>// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.</span>
 <span class='comment'>// See the License for the specific language governing permissions and</span>
 <span class='comment'>// limitations under the License.</span>
-<span class='comment'>//</span>
 
 <span class='attribute'>#<span class='op'>!</span>[<span class='ident'>allow</span>(<span class='ident'>unused_imports</span>)]</span>
 <span class='attribute'>#<span class='op'>!</span>[<span class='ident'>allow</span>(<span class='ident'>unused_variables</span>)]</span>
@@ -241,16 +239,16 @@
             <span class='kw'>match</span> <span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>format</span> {
                 <span class='ident'>OutputFormat</span>::<span class='ident'>Plain</span> <span class='op'>=&gt;</span> {
                     <span class='comment'>// Could have already been serialized before being passed to this function.</span>
-                    <span class='macro'>println_color</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{:#?}&quot;</span>, <span class='ident'>acl</span>);
+                    <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{:#?}&quot;</span>, <span class='ident'>acl</span>);
                 },
                 <span class='ident'>OutputFormat</span>::<span class='ident'>JSON</span> <span class='op'>=&gt;</span> {
-                    <span class='macro'>println_color</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>json</span>::<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='ident'>acl</span>).<span class='ident'>unwrap_or</span>(<span class='string'>&quot;{}&quot;</span>.<span class='ident'>to_string</span>()));
+                    <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>json</span>::<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='ident'>acl</span>).<span class='ident'>unwrap_or</span>(<span class='string'>&quot;{}&quot;</span>.<span class='ident'>to_string</span>()));
                 },
                 <span class='ident'>OutputFormat</span>::<span class='ident'>PrettyJSON</span> <span class='op'>=&gt;</span> {
-                    <span class='macro'>println_color</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>json</span>::<span class='ident'>as_pretty_json</span>(<span class='kw-2'>&amp;</span><span class='ident'>acl</span>));
+                    <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>json</span>::<span class='ident'>as_pretty_json</span>(<span class='kw-2'>&amp;</span><span class='ident'>acl</span>));
                 },
                 <span class='ident'>OutputFormat</span>::<span class='prelude-val'>None</span> <span class='op'>=&gt;</span> {},
-                <span class='ident'>e</span> @ _ <span class='op'>=&gt;</span> <span class='macro'>println</span><span class='macro'>!</span>(<span class='string'>&quot;Error: Format - {:#?}&quot;</span>, <span class='ident'>e</span>),
+                <span class='ident'>e</span> @ _ <span class='op'>=&gt;</span> <span class='macro'>println_color</span><span class='macro'>!</span>(<span class='ident'>term</span>::<span class='ident'>color</span>::<span class='ident'>RED</span>, <span class='string'>&quot;Error: Format - {:#?}&quot;</span>, <span class='ident'>e</span>),
             }
         },
         (<span class='string'>&quot;list&quot;</span>, _) <span class='op'>=&gt;</span> {
@@ -280,16 +278,16 @@
           <span class='kw'>match</span> <span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>format</span> {
               <span class='ident'>OutputFormat</span>::<span class='ident'>Plain</span> <span class='op'>=&gt;</span> {
                   <span class='comment'>// Could have already been serialized before being passed to this function.</span>
-                  <span class='macro'>println_color</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{:#?}&quot;</span>, <span class='ident'>output</span>);
+                  <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{:#?}&quot;</span>, <span class='ident'>output</span>);
               },
               <span class='ident'>OutputFormat</span>::<span class='ident'>JSON</span> <span class='op'>=&gt;</span> {
-                  <span class='macro'>println_color</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>json</span>::<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='ident'>output</span>).<span class='ident'>unwrap_or</span>(<span class='string'>&quot;{}&quot;</span>.<span class='ident'>to_string</span>()));
+                  <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>json</span>::<span class='ident'>encode</span>(<span class='kw-2'>&amp;</span><span class='ident'>output</span>).<span class='ident'>unwrap_or</span>(<span class='string'>&quot;{}&quot;</span>.<span class='ident'>to_string</span>()));
               },
               <span class='ident'>OutputFormat</span>::<span class='ident'>PrettyJSON</span> <span class='op'>=&gt;</span> {
-                  <span class='macro'>println_color</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>json</span>::<span class='ident'>as_pretty_json</span>(<span class='kw-2'>&amp;</span><span class='ident'>output</span>));
+                  <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>client</span>.<span class='ident'>output</span>.<span class='ident'>color</span>, <span class='string'>&quot;{}&quot;</span>, <span class='ident'>json</span>::<span class='ident'>as_pretty_json</span>(<span class='kw-2'>&amp;</span><span class='ident'>output</span>));
               },
               <span class='ident'>OutputFormat</span>::<span class='prelude-val'>None</span> <span class='op'>=&gt;</span> {},
-              <span class='ident'>e</span> @ _ <span class='op'>=&gt;</span> <span class='macro'>println</span><span class='macro'>!</span>(<span class='string'>&quot;Error: Format - {:#?}&quot;</span>, <span class='ident'>e</span>),
+              <span class='ident'>e</span> @ _ <span class='op'>=&gt;</span> <span class='macro'>println_color_quiet</span><span class='macro'>!</span>(<span class='ident'>client</span>.<span class='ident'>is_quiet</span>, <span class='ident'>client</span>.<span class='ident'>error</span>.<span class='ident'>color</span>, <span class='string'>&quot;Error: Format - {:#?}&quot;</span>, <span class='ident'>e</span>),
           }
           <span class='prelude-val'>Ok</span>(())
       }
