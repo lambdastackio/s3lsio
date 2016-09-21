@@ -32,7 +32,6 @@ extern crate env_logger;
 #[macro_use]
 extern crate clap;
 extern crate pbr;
-extern crate unicase;
 
 use std::io::{self, Write};
 use std::env;
