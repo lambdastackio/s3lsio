@@ -23,23 +23,12 @@ For help just run the cli: s3lsio -h
 lsio = "0.1"
 aws-sdk-rust = "0.1"
 clap = "2"
-url = "*"
+url = "1"
 num_cpus = "1"
-uuid = { version = "*", features = ["v4"] }
-unicase = "*"
-handlebars = "0.20.0"
+uuid = { version = "0.3", features = ["v4"] }
+handlebars = "0.20"
 log = "0.3"
-env_logger = "0.3.4"
+env_logger = "0.3"
 term = "0.4"
 rustc-serialize = "0.3"
-pbr = "*"
-#serde = "*"
-#serde_json = "*"
-
-# Remove clap = "2" from dependencies above if using this type
-
-#[dependencies.clap]
-#version = "2"
-#default-features = false
-
-#features = [ "suggestions", "color" ]
+pbr = "0.3"
