@@ -1,6 +1,6 @@
 [package]
 name = "s3lsio"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Chris Jones <chris.jones@lambdastack.io>"]
 license = "Apache-2.0"
 readme = "README.md"
@@ -12,6 +12,9 @@ description = """
 S3lsio is a command line utility for AWS S3 operations. It support V2 and V4 signatures. A number of 3rd party products
 that accept S3 APIs use V2 signatures. It can be used in scripts, called from other apps, cron etc. It's driven by JSON
 and can return data in JSON. It can also be used to keep buckets in sync.
+
+NB: This is an Alpha release so there are functions not currently present. Those that are missing are being added
+quickly.
 
 For help just run the cli: s3lsio -h
 """
