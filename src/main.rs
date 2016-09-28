@@ -32,12 +32,13 @@ extern crate env_logger;
 #[macro_use]
 extern crate clap;
 extern crate pbr;
+extern crate toml;
 
 use std::io::{self, Write};
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use clap::{Shell};
+use clap::Shell;
 use url::Url;
 
 use aws_sdk_rust::aws::errors::s3::S3Error;
@@ -48,6 +49,14 @@ use aws_sdk_rust::aws::common::credentials::{AwsCredentialsProvider, DefaultCred
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 
 use common::progress::ProgressBar;
+use lsio::config::ConfigFile;
+
+mod bucket;
+mod object;
+mod util;
+mod common;
+mod cli;
+mod config;
 
 /// Allows you to set the output type for stderr and stdout.
 ///
@@ -93,24 +102,16 @@ pub struct Output {
 /// Example: fn whatever_function<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client: &mut Client<P,D>)
 /// Note: Could also specify 'where' P:... D:... instead.
 ///
-pub struct Client<'a, P: 'a, D: 'a> //, T>
+pub struct Client<'a, P: 'a, D: 'a>
     where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-          //T: Write,
+          D: DispatchSignedRequest, // T: Write,
 {
     pub s3client: &'a mut S3Client<P, D>,
     pub error: Error,
     pub output: Output,
     pub is_quiet: bool,
-    pub is_default_config: bool,
-    //pub pbr: ProgressBar<T>,
+    pub is_default_config: bool, // pub pbr: ProgressBar<T>,
 }
-
-mod bucket;
-mod object;
-mod util;
-mod common;
-mod cli;
 
 fn main() {
     // Gets overridden by cli option
@@ -146,7 +147,7 @@ fn main() {
     // NOTE: Get parameters or config for region, signature etc
     // Safe to unwrap since a default value is passed in. If a panic occurs then the environment
     // does not support a home directory.
-    let config = matches.value_of("config").unwrap();
+    let config_option = matches.value_of("config").unwrap();
     let region = match matches.value_of("region").unwrap().to_string().to_lowercase().as_ref() {
         "useast1" => Region::UsEast1,
         "uswest1" => Region::UsWest1,
@@ -164,8 +165,10 @@ fn main() {
     };
 
     // Option so None will be return if nothing is passed in.
-    let ep = matches.value_of("endpoint");
-    let proxy = matches.value_of("proxy");
+    let ep_str = matches.value_of("endpoint");
+    let proxy_str = matches.value_of("proxy");
+    let signature_str = matches.value_of("signature");
+
     let output = match matches.value_of("output").unwrap().to_string().to_lowercase().as_ref() {
         "json" => OutputFormat::JSON,
         "pretty-json" => OutputFormat::PrettyJSON,
@@ -182,24 +185,43 @@ fn main() {
         _ => term::color::GREEN,
     };
 
+    // Set the config_file path to the default if a value is empty or set it to the passed in path value
+    let mut config_file: PathBuf;
+    if config_option.is_empty() {
+        config_file = home.clone();
+    } else {
+        config_file = PathBuf::new();
+        config_file.push(config_option);
+    }
+
+    let mut config = config::Config::from_file(config_file).unwrap_or(config::Config::default());
+
+    // Let CLI args override any config setting if they exists.
+    if ep_str.is_some() {
+      config.set_endpoint(Some(Url::parse(ep_str.unwrap()).unwrap()));
+    }
+
+    if proxy_str.is_some() {
+      config.set_proxy(Some(Url::parse(proxy_str.unwrap()).unwrap()));
+    }
+
+    if signature_str.is_some() {
+      config.set_signature(signature_str.unwrap().to_string());
+    } else {
+      config.set_signature("V4".to_string());
+    }
+    let sign: String = config.signature.to_lowercase();
+
     let provider = DefaultCredentialsProvider::new(None).unwrap();
 
     let endpoint = Endpoint::new(region,
-                                 if matches.value_of("signature").unwrap() == "V2" {
+                                 if sign == "v2" {
                                      Signature::V2
                                  } else {
                                      Signature::V4
                                  },
-                                 if ep.is_some() {
-                                     Some(Url::parse(ep.unwrap()).unwrap())
-                                 } else {
-                                     None
-                                 },
-                                 if proxy.is_some() {
-                                     Some(Url::parse(proxy.unwrap()).unwrap())
-                                 } else {
-                                     None
-                                 },
+                                 config.endpoint,
+                                 config.proxy,
                                  Some(format!("s3lsio - {}", version)));
 
     let mut s3client = S3Client::new(provider, endpoint);
@@ -215,7 +237,7 @@ fn main() {
             color: output_color,
         },
         is_quiet: is_quiet,
-        is_default_config: config == home.to_str().unwrap(),
+        is_default_config: config_option == home.to_str().unwrap(),
     };
 
     // Check which subcomamnd the user ran...
