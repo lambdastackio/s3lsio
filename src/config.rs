@@ -75,4 +75,12 @@ impl Config {
     pub fn set_signature(&mut self, value: String) {
         self.signature = value;
     }
+
+    pub fn endpoint(&self) -> &Option<Url> {
+        &self.endpoint
+    }
+
+    pub fn proxy(&self) -> &Option<Url> {
+        &self.proxy
+    }
 }

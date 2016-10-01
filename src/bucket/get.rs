@@ -91,9 +91,9 @@ fn get_bucket_head<P, D>(bucket: &str,
                          -> Result<(), S3Error>
                          where P: AwsCredentialsProvider,
                                D: DispatchSignedRequest {
-     let bucket_head = HeadBucketRequest { bucket: bucket.to_string() };
+     let request = HeadBucketRequest { bucket: bucket.to_string() };
 
-     match client.s3client.head_bucket(&bucket_head) {
+     match client.s3client.head_bucket(&request) {
          Ok(_) => {
            println_color_quiet!(client.is_quiet, client.output.color, "Bucket exists");
            Ok(())
@@ -110,9 +110,9 @@ fn get_bucket_versioning<P, D>(bucket: &str,
                                -> Result<(), S3Error>
                                where P: AwsCredentialsProvider,
                                      D: DispatchSignedRequest {
-     let bucket_versioning = GetBucketVersioningRequest { bucket: bucket.to_string() };
+     let request = GetBucketVersioningRequest { bucket: bucket.to_string() };
 
-     match client.s3client.get_bucket_versioning(&bucket_versioning) {
+     match client.s3client.get_bucket_versioning(&request) {
          Ok(version) => {
            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", version);
            Ok(())
@@ -160,10 +160,10 @@ pub fn get_bucket_acl<P, D>(bucket: &str,
                             -> Result<AccessControlPolicy, S3Error>
                             where P: AwsCredentialsProvider,
                                   D: DispatchSignedRequest {
-    let mut bucket_acl = GetBucketAclRequest::default();
-    bucket_acl.bucket = bucket.to_string();
+    let mut request = GetBucketAclRequest::default();
+    request.bucket = bucket.to_string();
 
-    match client.s3client.get_bucket_acl(&bucket_acl) {
+    match client.s3client.get_bucket_acl(&request) {
         Ok(acl) => Ok(acl),
         Err(e) => {
             println_color_quiet!(client.is_quiet, client.error.color, "{:?}", e);

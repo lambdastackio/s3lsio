@@ -15,6 +15,7 @@
 
 #![allow(unused_imports)]
 #![allow(unused_must_use)]
+#![allow(unused_variables)]
 
 use clap::ArgMatches;
 use term;
@@ -22,9 +23,10 @@ use term;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
+use aws_sdk_rust::aws::s3::object::*;
 
-// For Objects...
 use Client;
+use Output;
 
 pub mod get;
 pub mod put;
@@ -35,26 +37,66 @@ pub fn commands<P, D>(matches: &ArgMatches,
                       -> Result<(), S3Error>
                       where P: AwsCredentialsProvider,
                             D: DispatchSignedRequest {
+    let bucket = matches.value_of("bucket").unwrap_or("");
+
     match matches.subcommand() {
         ("get", Some(sub_matches)) => {
-            match get::commands(sub_matches, client) {
-                Err(e) => Err(e),
-                Ok(_) => Ok(())
-            }
-        }
-        ("put", Some(sub_matches)) => {
-            match put::commands(sub_matches, client) {
+            match get::commands(sub_matches, bucket, client) {
                 Err(e) => Err(e),
                 Ok(_) => Ok(())
             }
         },
-        ("delete", Some(sub_matches)) => delete::commands(sub_matches, client),
-        (e, _) => {
-            let error = format!("incorrect or missing request {}", e);
+        ("list", _) => {
+          if bucket.is_empty() {
+            let error = format!("missing bucket name");
             println_color_quiet!(client.is_quiet, term::color::RED, "{}", error);
             Err(S3Error::new(error))
+          } else {
+            let acl = try!(get_bucket_list(bucket, client));
+            Ok(())
+          }
+        },
+        ("put", Some(sub_matches)) => {
+          match put::commands(sub_matches, bucket, client) {
+              Err(e) => Err(e),
+              Ok(_) => Ok(())
+          }
+        },
+        ("delete", Some(sub_matches)) => {
+          match delete::commands(sub_matches, bucket, client) {
+            Err(e) => Err(e),
+            Ok(_) => Ok(())
+          }
+        },
+        (e, _) => {
+          let error = format!("incorrect or missing request {}", e);
+          println_color_quiet!(client.is_quiet, term::color::RED, "{}", error);
+          return Err(S3Error::new(error));
         },
     };
 
     Ok(())
+}
+
+fn get_bucket_list<P, D>(bucket: &str,
+                         client: &Client<P,D>)
+                         -> Result<(), S3Error>
+                         where P: AwsCredentialsProvider,
+                               D: DispatchSignedRequest {
+    let mut request = ListObjectsRequest::default();
+    request.bucket = bucket.to_string();
+    request.version = Some(2);
+
+    match client.s3client.list_objects(&request) {
+      Ok(output) => {
+          println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
+          Ok(())
+      }
+      Err(error) => {
+          let format = format!("{:#?}", error);
+          let error = S3Error::new(format);
+          println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
+          Err(error)
+      }
+    }
 }

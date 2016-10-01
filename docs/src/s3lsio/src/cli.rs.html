@@ -173,6 +173,26 @@
 <span id="129">129</span>
 <span id="130">130</span>
 <span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+<span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
+<span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
+<span id="151">151</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -252,20 +272,29 @@
                    .<span class='ident'>default_value</span>(<span class='string'>&quot;V4&quot;</span>)
                    .<span class='ident'>help</span>(<span class='string'>&quot;Sets an API Signature version. Default is V4&quot;</span>)
                    .<span class='ident'>takes_value</span>(<span class='bool-val'>true</span>))
+       .<span class='ident'>arg</span>(<span class='ident'>Arg</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;yes&quot;</span>)
+                   .<span class='ident'>short</span>(<span class='string'>&quot;y&quot;</span>)
+                   .<span class='ident'>long</span>(<span class='string'>&quot;yes&quot;</span>)
+                   .<span class='ident'>help</span>(<span class='string'>&quot;Answer yes automatically&quot;</span>))
        .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;bucket&quot;</span>)
-            .<span class='ident'>about</span>(<span class='string'>&quot;Perform all bucket specific operations&quot;</span>)
+            .<span class='ident'>about</span>(<span class='string'>&quot;Perform all bucket specific operations. Example: bucket command &lt;your bucket name&gt;...&quot;</span>)
+            .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;create&quot;</span>)
+                .<span class='ident'>about</span>(<span class='string'>&quot;Create a bucket&quot;</span>)
+                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Bucket name&#39;&quot;</span>))
             .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;delete&quot;</span>)
                 .<span class='ident'>about</span>(<span class='string'>&quot;Delete operation for bucket&quot;</span>)
                 .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Bucket name&#39;&quot;</span>))
             .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;get&quot;</span>)
                 .<span class='ident'>about</span>(<span class='string'>&quot;Get operation for bucket&quot;</span>)
-                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Bucket name. Leave empty if getting list of buckets&#39;&quot;</span>)
+                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Bucket name&#39;&quot;</span>)
                 .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;acl&quot;</span>)
                     .<span class='ident'>about</span>(<span class='string'>&quot;Returns the bucket ACLs&quot;</span>))
-                .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;list&quot;</span>)
-                    .<span class='ident'>about</span>(<span class='string'>&quot;Returns the list of buckets&quot;</span>))
+                .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;head&quot;</span>)
+                    .<span class='ident'>about</span>(<span class='string'>&quot;Returns the bucket head&quot;</span>))
                 .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;versioning&quot;</span>)
                     .<span class='ident'>about</span>(<span class='string'>&quot;Returns versioning&quot;</span>)))
+            .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;list&quot;</span>)
+                .<span class='ident'>about</span>(<span class='string'>&quot;Lists the buckets&quot;</span>))
             .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;put&quot;</span>)
                 .<span class='ident'>about</span>(<span class='string'>&quot;Put operation for bucket&quot;</span>)
                 .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Bucket name&#39;&quot;</span>)
@@ -282,18 +311,26 @@
                 .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;versioning&quot;</span>)
                     .<span class='ident'>about</span>(<span class='string'>&quot;Enables versioning for a bucket&quot;</span>))))
        .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;object&quot;</span>)
-            .<span class='ident'>about</span>(<span class='string'>&quot;Perform all object specific operations&quot;</span>)
+            .<span class='ident'>about</span>(<span class='string'>&quot;Perform all object specific operations. Example: object &lt;your bucket name&gt; command &lt;your object name&gt; &lt;options&gt;...&quot;</span>)
+            .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[bucket] &#39;Bucket name&#39;&quot;</span>)
             .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;delete&quot;</span>)
-                .<span class='ident'>about</span>(<span class='string'>&quot;Delete operation for objects&quot;</span>)
-                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Object name&#39;&quot;</span>))
+                .<span class='ident'>about</span>(<span class='string'>&quot;DELETE operation for objects&quot;</span>)
+                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[object] &#39;Object name&#39;&quot;</span>)
+                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[version] &#39;Object Version ID&#39;&quot;</span>))
             .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;get&quot;</span>)
-                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[bucket] &#39;Bucket name.&#39;&quot;</span>)
-                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Object name.&#39;&quot;</span>)
-                .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;acl&quot;</span>))
+                .<span class='ident'>about</span>(<span class='string'>&quot;GET operations for objects&quot;</span>)
+                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[object] &#39;Object name&#39;&quot;</span>)
+                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[path] &#39;Full file path&#39;&quot;</span>)
+                .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;acl&quot;</span>)
                     .<span class='ident'>about</span>(<span class='string'>&quot;Returns the object ACLs&quot;</span>))
+                .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;head&quot;</span>)
+                    .<span class='ident'>about</span>(<span class='string'>&quot;Returns object metadata&quot;</span>)))
+            .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;list&quot;</span>)
+                .<span class='ident'>about</span>(<span class='string'>&quot;Returns a list of objects for a bucket&quot;</span>))
             .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;put&quot;</span>)
-                .<span class='ident'>about</span>(<span class='string'>&quot;Put operation for objects&quot;</span>)
-                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[name] &#39;Object name&#39;&quot;</span>)
+                .<span class='ident'>about</span>(<span class='string'>&quot;PUT operations for objects&quot;</span>)
+                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[object] &#39;Object name&#39;&quot;</span>)
+                .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[path] &#39;Full file path&#39;&quot;</span>)
                 .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;acl&quot;</span>)
                     .<span class='ident'>about</span>(<span class='string'>&quot;Sets the Object ACLs&quot;</span>)
                     .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;public-read&quot;</span>)
@@ -303,7 +340,10 @@
                     .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;public-rw&quot;</span>)
                         .<span class='ident'>about</span>(<span class='string'>&quot;Allows the public to read/write the object&quot;</span>))
                     .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;private&quot;</span>)
-                        .<span class='ident'>about</span>(<span class='string'>&quot;Sets the object to private&quot;</span>)))))
+                        .<span class='ident'>about</span>(<span class='string'>&quot;Sets the object to private&quot;</span>)))
+                .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;key&quot;</span>)
+                    .<span class='ident'>about</span>(<span class='string'>&quot;Use as object key name&quot;</span>)
+                    .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[key] &#39;Object Key&#39;&quot;</span>))))
 }
 </pre>
 </section>

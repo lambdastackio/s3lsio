@@ -278,6 +278,44 @@
 <span id="234">234</span>
 <span id="235">235</span>
 <span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
+<span id="253">253</span>
+<span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -300,6 +338,21 @@
        <span class='ident'>html_favicon_url</span> <span class='op'>=</span> <span class='string'>&quot;https://lambdastackio.github.io/static/images/favicon.ico&quot;</span>,
        <span class='ident'>html_root_url</span> <span class='op'>=</span> <span class='string'>&quot;https://lambdastackio.github.io/s3lsio/s3lsio/index.html&quot;</span>)]</span>
 
+<span class='doccomment'>//! If you want a configuration file to store options so that you don&#39;t want to pass those in</span>
+<span class='doccomment'>//! each time then create a subdirectory in your home directory:</span>
+<span class='doccomment'>//! ```mkdir ~/.s3lsio```</span>
+<span class='doccomment'>//! Create a TOML file called config:</span>
+<span class='doccomment'>//! ```vim ~/.s3lsio/config```</span>
+<span class='doccomment'>//! Add the following options (optional):</span>
+<span class='doccomment'>//! [options]</span>
+<span class='doccomment'>//! endpoint = &quot;&lt;whatever endpoint you want&gt;&quot;</span>
+<span class='doccomment'>//! proxy = &quot;&lt;whatever your proxy url with port if you use a proxy&gt;&quot;</span>
+<span class='doccomment'>//! signature = &quot;V4&quot;</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! NOTE: You can set signature to V2 or V4 depending on the product you are going after. By</span>
+<span class='doccomment'>//! default AWS S3 uses V4 but products like Ceph (Hammer release) use V2. Ceph (Jewel release)</span>
+<span class='doccomment'>//! uses V4. The default is V4.</span>
+
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>lsio</span>;
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>aws_sdk_rust</span>;
@@ -313,12 +366,13 @@
 <span class='attribute'>#[<span class='ident'>macro_use</span>]</span>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>clap</span>;
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>pbr</span>;
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>toml</span>;
 
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>::{<span class='self'>self</span>, <span class='ident'>Write</span>};
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>env</span>;
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>path</span>::<span class='ident'>PathBuf</span>;
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>path</span>::{<span class='ident'>Path</span>, <span class='ident'>PathBuf</span>};
 
-<span class='kw'>use</span> <span class='ident'>clap</span>::{<span class='ident'>Shell</span>};
+<span class='kw'>use</span> <span class='ident'>clap</span>::<span class='ident'>Shell</span>;
 <span class='kw'>use</span> <span class='ident'>url</span>::<span class='ident'>Url</span>;
 
 <span class='kw'>use</span> <span class='ident'>aws_sdk_rust</span>::<span class='ident'>aws</span>::<span class='ident'>errors</span>::<span class='ident'>s3</span>::<span class='ident'>S3Error</span>;
@@ -329,6 +383,14 @@
 <span class='kw'>use</span> <span class='ident'>aws_sdk_rust</span>::<span class='ident'>aws</span>::<span class='ident'>common</span>::<span class='ident'>request</span>::<span class='ident'>DispatchSignedRequest</span>;
 
 <span class='kw'>use</span> <span class='ident'>common</span>::<span class='ident'>progress</span>::<span class='ident'>ProgressBar</span>;
+<span class='kw'>use</span> <span class='ident'>lsio</span>::<span class='ident'>config</span>::<span class='ident'>ConfigFile</span>;
+
+<span class='kw'>mod</span> <span class='ident'>bucket</span>;
+<span class='kw'>mod</span> <span class='ident'>object</span>;
+<span class='kw'>mod</span> <span class='ident'>util</span>;
+<span class='kw'>mod</span> <span class='ident'>common</span>;
+<span class='kw'>mod</span> <span class='ident'>cli</span>;
+<span class='kw'>mod</span> <span class='ident'>config</span>;
 
 <span class='doccomment'>/// Allows you to set the output type for stderr and stdout.</span>
 <span class='doccomment'>///</span>
@@ -374,24 +436,17 @@
 <span class='doccomment'>/// Example: fn whatever_function&lt;P: AwsCredentialsProvider, D: DispatchSignedRequest&gt;(client: &amp;mut Client&lt;P,D&gt;)</span>
 <span class='doccomment'>/// Note: Could also specify &#39;where&#39; P:... D:... instead.</span>
 <span class='doccomment'>///</span>
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Client</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>P</span>: <span class='lifetime'>&#39;a</span>, <span class='ident'>D</span>: <span class='lifetime'>&#39;a</span><span class='op'>&gt;</span> <span class='comment'>//, T&gt;</span>
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Client</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>P</span>: <span class='lifetime'>&#39;a</span>, <span class='ident'>D</span>: <span class='lifetime'>&#39;a</span><span class='op'>&gt;</span>
     <span class='kw'>where</span> <span class='ident'>P</span>: <span class='ident'>AwsCredentialsProvider</span>,
-          <span class='ident'>D</span>: <span class='ident'>DispatchSignedRequest</span>,
-          <span class='comment'>//T: Write,</span>
+          <span class='ident'>D</span>: <span class='ident'>DispatchSignedRequest</span>, <span class='comment'>// T: Write,</span>
 {
     <span class='kw'>pub</span> <span class='ident'>s3client</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='kw-2'>mut</span> <span class='ident'>S3Client</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>D</span><span class='op'>&gt;</span>,
     <span class='kw'>pub</span> <span class='ident'>error</span>: <span class='ident'>Error</span>,
     <span class='kw'>pub</span> <span class='ident'>output</span>: <span class='ident'>Output</span>,
     <span class='kw'>pub</span> <span class='ident'>is_quiet</span>: <span class='ident'>bool</span>,
-    <span class='kw'>pub</span> <span class='ident'>is_default_config</span>: <span class='ident'>bool</span>,
-    <span class='comment'>//pub pbr: ProgressBar&lt;T&gt;,</span>
+    <span class='kw'>pub</span> <span class='ident'>config</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='kw-2'>mut</span> <span class='ident'>config</span>::<span class='ident'>Config</span>,
+    <span class='comment'>// pub pbr: ProgressBar&lt;T&gt;,</span>
 }
-
-<span class='kw'>mod</span> <span class='ident'>bucket</span>;
-<span class='kw'>mod</span> <span class='ident'>object</span>;
-<span class='kw'>mod</span> <span class='ident'>util</span>;
-<span class='kw'>mod</span> <span class='ident'>common</span>;
-<span class='kw'>mod</span> <span class='ident'>cli</span>;
 
 <span class='kw'>fn</span> <span class='ident'>main</span>() {
     <span class='comment'>// Gets overridden by cli option</span>
@@ -427,7 +482,7 @@
     <span class='comment'>// NOTE: Get parameters or config for region, signature etc</span>
     <span class='comment'>// Safe to unwrap since a default value is passed in. If a panic occurs then the environment</span>
     <span class='comment'>// does not support a home directory.</span>
-    <span class='kw'>let</span> <span class='ident'>config</span> <span class='op'>=</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;config&quot;</span>).<span class='ident'>unwrap</span>();
+    <span class='kw'>let</span> <span class='ident'>config_option</span> <span class='op'>=</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;config&quot;</span>).<span class='ident'>unwrap</span>();
     <span class='kw'>let</span> <span class='ident'>region</span> <span class='op'>=</span> <span class='kw'>match</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;region&quot;</span>).<span class='ident'>unwrap</span>().<span class='ident'>to_string</span>().<span class='ident'>to_lowercase</span>().<span class='ident'>as_ref</span>() {
         <span class='string'>&quot;useast1&quot;</span> <span class='op'>=&gt;</span> <span class='ident'>Region</span>::<span class='ident'>UsEast1</span>,
         <span class='string'>&quot;uswest1&quot;</span> <span class='op'>=&gt;</span> <span class='ident'>Region</span>::<span class='ident'>UsWest1</span>,
@@ -445,8 +500,10 @@
     };
 
     <span class='comment'>// Option so None will be return if nothing is passed in.</span>
-    <span class='kw'>let</span> <span class='ident'>ep</span> <span class='op'>=</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;endpoint&quot;</span>);
-    <span class='kw'>let</span> <span class='ident'>proxy</span> <span class='op'>=</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;proxy&quot;</span>);
+    <span class='kw'>let</span> <span class='ident'>ep_str</span> <span class='op'>=</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;endpoint&quot;</span>);
+    <span class='kw'>let</span> <span class='ident'>proxy_str</span> <span class='op'>=</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;proxy&quot;</span>);
+    <span class='kw'>let</span> <span class='ident'>signature_str</span> <span class='op'>=</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;signature&quot;</span>);
+
     <span class='kw'>let</span> <span class='ident'>output</span> <span class='op'>=</span> <span class='kw'>match</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;output&quot;</span>).<span class='ident'>unwrap</span>().<span class='ident'>to_string</span>().<span class='ident'>to_lowercase</span>().<span class='ident'>as_ref</span>() {
         <span class='string'>&quot;json&quot;</span> <span class='op'>=&gt;</span> <span class='ident'>OutputFormat</span>::<span class='ident'>JSON</span>,
         <span class='string'>&quot;pretty-json&quot;</span> <span class='op'>=&gt;</span> <span class='ident'>OutputFormat</span>::<span class='ident'>PrettyJSON</span>,
@@ -463,24 +520,43 @@
         _ <span class='op'>=&gt;</span> <span class='ident'>term</span>::<span class='ident'>color</span>::<span class='ident'>GREEN</span>,
     };
 
+    <span class='comment'>// Set the config_file path to the default if a value is empty or set it to the passed in path value</span>
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>config_file</span>: <span class='ident'>PathBuf</span>;
+    <span class='kw'>if</span> <span class='ident'>config_option</span>.<span class='ident'>is_empty</span>() {
+        <span class='ident'>config_file</span> <span class='op'>=</span> <span class='ident'>home</span>.<span class='ident'>clone</span>();
+    } <span class='kw'>else</span> {
+        <span class='ident'>config_file</span> <span class='op'>=</span> <span class='ident'>PathBuf</span>::<span class='ident'>new</span>();
+        <span class='ident'>config_file</span>.<span class='ident'>push</span>(<span class='ident'>config_option</span>);
+    }
+
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>config</span> <span class='op'>=</span> <span class='ident'>config</span>::<span class='ident'>Config</span>::<span class='ident'>from_file</span>(<span class='ident'>config_file</span>).<span class='ident'>unwrap_or</span>(<span class='ident'>config</span>::<span class='ident'>Config</span>::<span class='ident'>default</span>());
+
+    <span class='comment'>// Let CLI args override any config setting if they exists.</span>
+    <span class='kw'>if</span> <span class='ident'>ep_str</span>.<span class='ident'>is_some</span>() {
+      <span class='ident'>config</span>.<span class='ident'>set_endpoint</span>(<span class='prelude-val'>Some</span>(<span class='ident'>Url</span>::<span class='ident'>parse</span>(<span class='ident'>ep_str</span>.<span class='ident'>unwrap</span>()).<span class='ident'>unwrap</span>()));
+    }
+
+    <span class='kw'>if</span> <span class='ident'>proxy_str</span>.<span class='ident'>is_some</span>() {
+      <span class='ident'>config</span>.<span class='ident'>set_proxy</span>(<span class='prelude-val'>Some</span>(<span class='ident'>Url</span>::<span class='ident'>parse</span>(<span class='ident'>proxy_str</span>.<span class='ident'>unwrap</span>()).<span class='ident'>unwrap</span>()));
+    }
+
+    <span class='kw'>if</span> <span class='ident'>signature_str</span>.<span class='ident'>is_some</span>() {
+      <span class='ident'>config</span>.<span class='ident'>set_signature</span>(<span class='ident'>signature_str</span>.<span class='ident'>unwrap</span>().<span class='ident'>to_string</span>());
+    } <span class='kw'>else</span> {
+      <span class='ident'>config</span>.<span class='ident'>set_signature</span>(<span class='string'>&quot;V4&quot;</span>.<span class='ident'>to_string</span>());
+    }
+    <span class='kw'>let</span> <span class='ident'>sign</span>: <span class='ident'>String</span> <span class='op'>=</span> <span class='ident'>config</span>.<span class='ident'>signature</span>.<span class='ident'>to_lowercase</span>();
+
     <span class='kw'>let</span> <span class='ident'>provider</span> <span class='op'>=</span> <span class='ident'>DefaultCredentialsProvider</span>::<span class='ident'>new</span>(<span class='prelude-val'>None</span>).<span class='ident'>unwrap</span>();
 
     <span class='kw'>let</span> <span class='ident'>endpoint</span> <span class='op'>=</span> <span class='ident'>Endpoint</span>::<span class='ident'>new</span>(<span class='ident'>region</span>,
-                                 <span class='kw'>if</span> <span class='ident'>matches</span>.<span class='ident'>value_of</span>(<span class='string'>&quot;signature&quot;</span>).<span class='ident'>unwrap</span>() <span class='op'>==</span> <span class='string'>&quot;V2&quot;</span> {
+                                 <span class='kw'>if</span> <span class='ident'>sign</span> <span class='op'>==</span> <span class='string'>&quot;v2&quot;</span> {
                                      <span class='ident'>Signature</span>::<span class='ident'>V2</span>
                                  } <span class='kw'>else</span> {
                                      <span class='ident'>Signature</span>::<span class='ident'>V4</span>
                                  },
-                                 <span class='kw'>if</span> <span class='ident'>ep</span>.<span class='ident'>is_some</span>() {
-                                     <span class='prelude-val'>Some</span>(<span class='ident'>Url</span>::<span class='ident'>parse</span>(<span class='ident'>ep</span>.<span class='ident'>unwrap</span>()).<span class='ident'>unwrap</span>())
-                                 } <span class='kw'>else</span> {
-                                     <span class='prelude-val'>None</span>
-                                 },
-                                 <span class='kw'>if</span> <span class='ident'>proxy</span>.<span class='ident'>is_some</span>() {
-                                     <span class='prelude-val'>Some</span>(<span class='ident'>Url</span>::<span class='ident'>parse</span>(<span class='ident'>proxy</span>.<span class='ident'>unwrap</span>()).<span class='ident'>unwrap</span>())
-                                 } <span class='kw'>else</span> {
-                                     <span class='prelude-val'>None</span>
-                                 },
+                                 <span class='ident'>config</span>.<span class='ident'>clone</span>().<span class='ident'>endpoint</span>,
+                                 <span class='ident'>config</span>.<span class='ident'>clone</span>().<span class='ident'>proxy</span>,
                                  <span class='prelude-val'>Some</span>(<span class='macro'>format</span><span class='macro'>!</span>(<span class='string'>&quot;s3lsio - {}&quot;</span>, <span class='ident'>version</span>)));
 
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>s3client</span> <span class='op'>=</span> <span class='ident'>S3Client</span>::<span class='ident'>new</span>(<span class='ident'>provider</span>, <span class='ident'>endpoint</span>);
@@ -496,7 +572,7 @@
             <span class='ident'>color</span>: <span class='ident'>output_color</span>,
         },
         <span class='ident'>is_quiet</span>: <span class='ident'>is_quiet</span>,
-        <span class='ident'>is_default_config</span>: <span class='ident'>config</span> <span class='op'>==</span> <span class='ident'>home</span>.<span class='ident'>to_str</span>().<span class='ident'>unwrap</span>(),
+        <span class='ident'>config</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>config</span>,
     };
 
     <span class='comment'>// Check which subcomamnd the user ran...</span>

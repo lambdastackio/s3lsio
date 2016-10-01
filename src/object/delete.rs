@@ -15,20 +15,50 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 
+use term;
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
+use aws_sdk_rust::aws::s3::object::*;
 
 use Client;
+use Output;
 
 pub fn commands<P, D>(matches: &ArgMatches,
+                      bucket: &str,
                       client: &mut Client<P,D>)
                       -> Result<(), S3Error>
                       where P: AwsCredentialsProvider,
                             D: DispatchSignedRequest {
-    let bucket = matches.value_of("name").unwrap_or("");
-    println!("{:#?}", matches);
+  let object = matches.value_of("object").unwrap_or("");
+  let version = matches.value_of("version").unwrap_or("");
 
-    Ok(())
+  //NOTE: For now there is only one delete function, deleting the object
+
+  let result = delete_object(bucket, object, version, client);
+
+  Ok(())
+}
+
+fn delete_object<P, D>(bucket: &str,
+                       object: &str,
+                       version: &str,
+                       client: &Client<P, D>)
+                       -> Result<(), S3Error>
+                       where P: AwsCredentialsProvider,
+                             D: DispatchSignedRequest {
+   let mut request = DeleteObjectRequest::default();
+   request.bucket = bucket.to_string();
+   request.key = object.to_string();
+   if !version.is_empty() {
+     request.version_id = Some(version.to_string());
+   }
+
+   match client.s3client.delete_object(&request) {
+       Ok(output) => println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output),
+       Err(e) => println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e),
+   }
+
+  Ok(())
 }

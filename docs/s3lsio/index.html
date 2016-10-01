@@ -47,8 +47,22 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-0' class='srclink' href='../src/s3lsio/src/main.rs.html#15-236' title='goto source code'>[src]</a></span></h1>
-<h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+               </span><a id='src-0' class='srclink' href='../src/s3lsio/src/main.rs.html#15-274' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>If you want a configuration file to store options so that you don&#39;t want to pass those in
+each time then create a subdirectory in your home directory:
+<code>mkdir ~/.s3lsio</code>
+Create a TOML file called config:
+<code>vim ~/.s3lsio/config</code>
+Add the following options (optional):
+[options]
+endpoint = &quot;<whatever endpoint you want>&quot;
+proxy = &quot;<whatever your proxy url with port if you use a proxy>&quot;
+signature = &quot;V4&quot;</p>
+
+<p>NOTE: You can set signature to V2 or V4 depending on the product you are going after. By
+default AWS S3 uses V4 but products like Ceph (Hammer release) use V2. Ceph (Jewel release)
+uses V4. The default is V4.</p>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
 <table>
                        <tr class=' module-item'>
                            <td><a class='struct' href='struct.Client.html'

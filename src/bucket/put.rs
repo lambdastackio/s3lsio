@@ -36,10 +36,11 @@ pub fn commands<P, D>(matches: &ArgMatches,
     let bucket = matches.value_of("name").unwrap_or("");
 
     match matches.subcommand() {
-        /// acl command.
+        /// set acl on bucket
         ("acl", Some(sub_matches)) => {
             let result = put_bucket_acl(sub_matches, bucket, client);
-          },
+        },
+        /// set versioning on bucket
         ("versioning", Some(sub_matches)) => {
             let result = put_bucket_versioning(sub_matches, bucket, client);
         },
@@ -64,7 +65,7 @@ fn put_bucket_versioning<P, D>(sub_matches: &ArgMatches,
                                -> Result<(), S3Error>
                                where P: AwsCredentialsProvider,
                                      D: DispatchSignedRequest {
-    let version = PutBucketVersioningRequest{
+    let request = PutBucketVersioningRequest{
         bucket: bucket.to_string(),
         versioning_configuration: VersioningConfiguration {
             status: "Enabled".to_string(),
@@ -74,7 +75,7 @@ fn put_bucket_versioning<P, D>(sub_matches: &ArgMatches,
         content_md5: None,
     };
 
-    match client.s3client.put_bucket_versioning(&version) {
+    match client.s3client.put_bucket_versioning(&request) {
         Ok(()) => {
           println_color_quiet!(client.is_quiet, client.output.color, "Success");
           Ok(())
@@ -93,35 +94,38 @@ fn put_bucket_acl<P, D>(sub_matches: &ArgMatches,
                         where P: AwsCredentialsProvider,
                               D: DispatchSignedRequest {
 
-    // Default to Private
-    let mut acl: CannedAcl = CannedAcl::Private;
+    let acl: CannedAcl;
 
     match sub_matches.subcommand() {
-        ("public-read", _) => acl = CannedAcl::PublicRead,
-        ("public-rw", _) => acl = CannedAcl::PublicReadWrite,
-        ("public-readwrite", _) => acl = CannedAcl::PublicReadWrite,
-        ("private", _) => acl = CannedAcl::Private,
-        (e, _) => println_color_quiet!(client.is_quiet, client.error.color, "Something {:?}", e),
+      ("public-read", _) => acl = CannedAcl::PublicRead,
+      ("public-rw", _) => acl = CannedAcl::PublicReadWrite,
+      ("public-readwrite", _) => acl = CannedAcl::PublicReadWrite,
+      ("private", _) => acl = CannedAcl::Private,
+      (e, _) => {
+        println_color_quiet!(client.is_quiet, client.error.color, "missing acl: public-read, public-rw, public-readwrite or private");
+        return Err(S3Error::new("missing acl: public-read, public-rw, public-readwrite or private"));
+      },
     }
 
-    let mut bucket_acl = PutBucketAclRequest::default();
-    bucket_acl.bucket = bucket.to_string();
+    let mut request = PutBucketAclRequest::default();
+    request.bucket = bucket.to_string();
 
     // get acl option...
-    bucket_acl.acl = Some(acl);
+    request.acl = Some(acl);
 
-    match client.s3client.put_bucket_acl(&bucket_acl) {
-        Ok(val) => {
-          let acl = get_bucket_acl(bucket, client);
-          if let Ok(acl) = acl {
-              println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", acl);
-          }
-        },
-        Err(e) => {
-            println_color_quiet!(client.is_quiet, client.error.color, "Something {:?}", e);
-            return Err(e)
-        },
+    match client.s3client.put_bucket_acl(&request) {
+      Ok(val) => {
+        let acl = get_bucket_acl(bucket, client);
+        if let Ok(acl) = acl {
+            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", acl);
+        }
+      },
+      Err(e) => {
+        let error = format!("{:#?}", e);
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+      },
     }
-    
+
     Ok(())
 }

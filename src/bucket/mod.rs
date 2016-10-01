@@ -14,14 +14,20 @@
 
 #![allow(unused_imports)]
 #![allow(unused_must_use)]
+#![allow(unused_variables)]
 
 use term;
+use rustc_serialize::json;
+
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
+use aws_sdk_rust::aws::s3::bucket::*;
 
 use Client;
+use Output;
+use OutputFormat;
 
 pub mod get;
 pub mod put;
@@ -40,6 +46,23 @@ pub fn commands<P, D>(matches: &ArgMatches,
                 Ok(_) => Ok(())
             }
         }
+        /// create new bucket
+        ("create", Some(sub_matches)) => {
+          let bucket = sub_matches.value_of("name").unwrap_or("");
+
+          if bucket.is_empty() {
+            let error = format!("missing bucket name");
+            println_color_quiet!(client.is_quiet, term::color::RED, "{}", error);
+            Err(S3Error::new(error))
+          } else {
+            let result = bucket_create(sub_matches, bucket, client);
+            Ok(())
+          }
+        },
+        ("list", Some(sub_matches)) => {
+          let list = try!(buckets_list(client));
+          Ok(())
+        }
         ("put", Some(sub_matches)) => {
             match put::commands(sub_matches, client) {
                 Err(e) => Err(e),
@@ -55,4 +78,59 @@ pub fn commands<P, D>(matches: &ArgMatches,
     };
 
     Ok(())
+}
+
+fn bucket_create<P, D>(sub_matches: &ArgMatches,
+                           bucket: &str,
+                           client: &Client<P, D>)
+                           -> Result<(), S3Error>
+                           where P: AwsCredentialsProvider,
+                                 D: DispatchSignedRequest {
+    let mut request = CreateBucketRequest::default();
+    request.bucket = bucket.to_string();
+
+    match client.s3client.create_bucket(&request) {
+        Ok(_) => {
+          println_color_quiet!(client.is_quiet, client.output.color, "Success");
+          Ok(())
+        },
+        Err(e) => {
+          println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
+          Err(e)
+        },
+    }
+}
+
+fn buckets_list<P, D>(client: &Client<P,D>)
+                          -> Result<(), S3Error>
+                          where P: AwsCredentialsProvider,
+                                D: DispatchSignedRequest {
+    match client.s3client.list_buckets() {
+      Ok(output) => {
+          match client.output.format {
+              OutputFormat::Serialize => {
+                  // Could have already been serialized before being passed to this function.
+                  println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
+              },
+              OutputFormat::Plain => {
+                  // Could have already been serialized before being passed to this function.
+                  println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
+              },
+              OutputFormat::JSON => {
+                  println_color_quiet!(client.is_quiet, client.output.color, "{}", json::encode(&output).unwrap_or("{}".to_string()));
+              },
+              OutputFormat::PrettyJSON => {
+                  println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
+              },
+              OutputFormat::None => {},
+          }
+          Ok(())
+      }
+      Err(error) => {
+          let format = format!("{:#?}", error);
+          let error = S3Error::new(format);
+          println_color_quiet!(client.is_quiet, client.error.color, "{:?}", error);
+          Err(error)
+      }
+    }
 }

@@ -19,6 +19,21 @@
        html_favicon_url = "https://lambdastackio.github.io/static/images/favicon.ico",
        html_root_url = "https://lambdastackio.github.io/s3lsio/s3lsio/index.html")]
 
+//! If you want a configuration file to store options so that you don't want to pass those in
+//! each time then create a subdirectory in your home directory:
+//! ```mkdir ~/.s3lsio```
+//! Create a TOML file called config:
+//! ```vim ~/.s3lsio/config```
+//! Add the following options (optional):
+//! [options]
+//! endpoint = "<whatever endpoint you want>"
+//! proxy = "<whatever your proxy url with port if you use a proxy>"
+//! signature = "V4"
+//!
+//! NOTE: You can set signature to V2 or V4 depending on the product you are going after. By
+//! default AWS S3 uses V4 but products like Ceph (Hammer release) use V2. Ceph (Jewel release)
+//! uses V4. The default is V4.
+
 #[macro_use]
 extern crate lsio;
 extern crate aws_sdk_rust;
@@ -110,7 +125,8 @@ pub struct Client<'a, P: 'a, D: 'a>
     pub error: Error,
     pub output: Output,
     pub is_quiet: bool,
-    pub is_default_config: bool, // pub pbr: ProgressBar<T>,
+    pub config: &'a mut config::Config,
+    // pub pbr: ProgressBar<T>,
 }
 
 fn main() {
@@ -220,8 +236,8 @@ fn main() {
                                  } else {
                                      Signature::V4
                                  },
-                                 config.endpoint,
-                                 config.proxy,
+                                 config.clone().endpoint,
+                                 config.clone().proxy,
                                  Some(format!("s3lsio - {}", version)));
 
     let mut s3client = S3Client::new(provider, endpoint);
@@ -237,7 +253,7 @@ fn main() {
             color: output_color,
         },
         is_quiet: is_quiet,
-        is_default_config: config_option == home.to_str().unwrap(),
+        config: &mut config,
     };
 
     // Check which subcomamnd the user ran...

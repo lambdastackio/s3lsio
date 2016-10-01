@@ -47,13 +47,13 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-51' class='srclink' href='../src/s3lsio/src/main.rs.html#96-107' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-770' class='srclink' href='../src/s3lsio/src/main.rs.html#120-130' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct Client&lt;'a,&nbsp;P:&nbsp;'a,&nbsp;D:&nbsp;'a&gt; <span class='where'>where P: <a class='trait' href='https://lambdastackio.github.io/aws-sdk-rust/aws_sdk_rust/aws/index.html/aws_sdk_rust/aws/common/credentials/trait.AwsCredentialsProvider.html' title='aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider'>AwsCredentialsProvider</a>, D: <a class='trait' href='https://lambdastackio.github.io/aws-sdk-rust/aws_sdk_rust/aws/index.html/aws_sdk_rust/aws/common/request/trait.DispatchSignedRequest.html' title='aws_sdk_rust::aws::common::request::DispatchSignedRequest'>DispatchSignedRequest</a></span> {
     pub s3client: &amp;'a mut <a class='struct' href='https://lambdastackio.github.io/aws-sdk-rust/aws_sdk_rust/aws/index.html/aws_sdk_rust/aws/s3/s3client/struct.S3Client.html' title='aws_sdk_rust::aws::s3::s3client::S3Client'>S3Client</a>&lt;P,&nbsp;D&gt;,
     pub error: <a class='struct' href='../s3lsio/struct.Error.html' title='s3lsio::Error'>Error</a>,
     pub output: <a class='struct' href='../s3lsio/struct.Output.html' title='s3lsio::Output'>Output</a>,
     pub is_quiet: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>,
-    pub is_default_config: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>,
+    pub config: &amp;'a mut Config,
 }</pre><div class='docblock'><p>Client structure holds a reference to the S3Client which also implements two traits:
 AwsCredentialsProvider and DispatchSignedRequest
 Since S3Client struct is takes those two traits as parameters then ALL functions called
@@ -72,9 +72,9 @@ Note: Could also specify &#39;where&#39; P:... D:... instead.</p>
                            </span></span><span class='stab '></span><span id='structfield.is_quiet' class='structfield'>
                            <span id='is_quiet.v' class='invisible'>
                            <code>is_quiet: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code>
-                           </span></span><span class='stab '></span><span id='structfield.is_default_config' class='structfield'>
-                           <span id='is_default_config.v' class='invisible'>
-                           <code>is_default_config: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code>
+                           </span></span><span class='stab '></span><span id='structfield.config' class='structfield'>
+                           <span id='config.v' class='invisible'>
+                           <code>config: &amp;'a mut Config</code>
                            </span></span><span class='stab '></span></section>
     <section id='search' class="content hidden"></section>
 
