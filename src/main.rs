@@ -66,22 +66,41 @@ use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 use common::progress::ProgressBar;
 use lsio::config::ConfigFile;
 
-mod bucket;
-mod object;
-mod util;
 mod common;
 mod cli;
 mod config;
+mod commands;
 
 /// Allows you to set the output type for stderr and stdout.
 ///
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OutputFormat {
     JSON,
     PrettyJSON,
     Plain,
     Serialize,
+    Simple,
     None,
+    // NoneAll is the same as None but will also not write out objects to disk
+    NoneAll,
+}
+
+/// Commands
+///
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(non_camel_case_types)]
+pub enum Commands {
+  acl,
+  get,
+  head,
+  mb,
+  put,
+  rb,
+  rm,
+  ls,
+  setacl,
+  setver,
+  ver,
 }
 
 // Error and Output can't have derive(debug) because term does not have some of it's structs
@@ -187,9 +206,12 @@ fn main() {
 
     let output = match matches.value_of("output").unwrap().to_string().to_lowercase().as_ref() {
         "json" => OutputFormat::JSON,
+        "none" => OutputFormat::None,
+        "noneall" => OutputFormat::NoneAll,
         "pretty-json" => OutputFormat::PrettyJSON,
         "plain" => OutputFormat::Plain,
         "serialize" => OutputFormat::Serialize,
+        "simple" => OutputFormat::Simple,
         _ => OutputFormat::PrettyJSON,
     };
     let output_color = match matches.value_of("output-color").unwrap().to_string().to_lowercase().as_ref() {
@@ -243,32 +265,41 @@ fn main() {
     let mut s3client = S3Client::new(provider, endpoint);
 
     let mut client = Client {
-        s3client: &mut s3client,
-        error: Error {
-            format: OutputFormat::Serialize,
-            color: term::color::RED,
-        },
-        output: Output {
-            format: output,
-            color: output_color,
-        },
-        is_quiet: is_quiet,
-        config: &mut config,
+      s3client: &mut s3client,
+      error: Error {
+          format: OutputFormat::Serialize,
+          color: term::color::RED,
+      },
+      output: Output {
+          format: output,
+          color: output_color,
+      },
+      is_quiet: is_quiet,
+      config: &mut config,
     };
 
     // Check which subcomamnd the user ran...
     let res = match matches.subcommand() {
-        ("bucket", Some(sub_matches)) => bucket::commands(sub_matches, &mut client),
-        ("object", Some(sub_matches)) => object::commands(sub_matches, &mut client),
-        (e, _) => {
-            println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
-            Err(S3Error::new("A valid instruction is required"))
-        },
+      ("acl", Some(sub_matches)) => commands::commands(sub_matches, Commands::acl, &mut client),
+      ("head", Some(sub_matches)) => commands::commands(sub_matches, Commands::head, &mut client),
+      ("ls", Some(sub_matches)) => commands::commands(sub_matches, Commands::ls, &mut client),
+      ("mb", Some(sub_matches)) => commands::commands(sub_matches, Commands::mb, &mut client),
+      ("rb", Some(sub_matches)) => commands::commands(sub_matches, Commands::rb, &mut client),
+      ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
+      ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
+      ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
+      ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
+      ("get", Some(sub_matches)) => commands::commands(sub_matches, Commands::get, &mut client),
+      ("put", Some(sub_matches)) => commands::commands(sub_matches, Commands::put, &mut client),
+      (e, _) => {
+        println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
+        Err(S3Error::new("A valid instruction is required"))
+      },
     };
 
     if let Err(e) = res {
-        println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
-        println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
-        ::std::process::exit(1);
+      println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
+      println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
+      ::std::process::exit(1);
     }
 }

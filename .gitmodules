@@ -1,0 +1,3 @@
+[submodule "packages/osx/homebrew-tap"]
+	path = packages/osx/homebrew-tap
+	url = https://github.com/lambdastackio/homebrew-tap.git
