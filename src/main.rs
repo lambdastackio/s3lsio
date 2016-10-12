@@ -48,6 +48,7 @@ extern crate env_logger;
 extern crate clap;
 extern crate pbr;
 extern crate toml;
+extern crate md5;
 
 use std::io::{self, Write};
 use std::env;
@@ -90,17 +91,19 @@ pub enum OutputFormat {
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum Commands {
-  acl,
-  get,
-  head,
-  mb,
-  put,
-  rb,
-  rm,
-  ls,
-  setacl,
-  setver,
-  ver,
+    abort,
+    acl,
+    get,
+    head,
+    mb,
+    put,
+    range,
+    rb,
+    rm,
+    ls,
+    setacl,
+    setver,
+    ver,
 }
 
 // Error and Output can't have derive(debug) because term does not have some of it's structs
@@ -144,8 +147,7 @@ pub struct Client<'a, P: 'a, D: 'a>
     pub error: Error,
     pub output: Output,
     pub is_quiet: bool,
-    pub config: &'a mut config::Config,
-    // pub pbr: ProgressBar<T>,
+    pub config: &'a mut config::Config, // pub pbr: ProgressBar<T>,
 }
 
 fn main() {
@@ -236,17 +238,17 @@ fn main() {
 
     // Let CLI args override any config setting if they exists.
     if ep_str.is_some() {
-      config.set_endpoint(Some(Url::parse(ep_str.unwrap()).unwrap()));
+        config.set_endpoint(Some(Url::parse(ep_str.unwrap()).unwrap()));
     }
 
     if proxy_str.is_some() {
-      config.set_proxy(Some(Url::parse(proxy_str.unwrap()).unwrap()));
+        config.set_proxy(Some(Url::parse(proxy_str.unwrap()).unwrap()));
     }
 
     if signature_str.is_some() {
-      config.set_signature(signature_str.unwrap().to_string());
+        config.set_signature(signature_str.unwrap().to_string());
     } else {
-      config.set_signature("V4".to_string());
+        config.set_signature("V4".to_string());
     }
     let sign: String = config.signature.to_lowercase();
 
@@ -265,41 +267,43 @@ fn main() {
     let mut s3client = S3Client::new(provider, endpoint);
 
     let mut client = Client {
-      s3client: &mut s3client,
-      error: Error {
-          format: OutputFormat::Serialize,
-          color: term::color::RED,
-      },
-      output: Output {
-          format: output,
-          color: output_color,
-      },
-      is_quiet: is_quiet,
-      config: &mut config,
+        s3client: &mut s3client,
+        error: Error {
+            format: OutputFormat::Serialize,
+            color: term::color::RED,
+        },
+        output: Output {
+            format: output,
+            color: output_color,
+        },
+        is_quiet: is_quiet,
+        config: &mut config,
     };
 
     // Check which subcomamnd the user ran...
     let res = match matches.subcommand() {
-      ("acl", Some(sub_matches)) => commands::commands(sub_matches, Commands::acl, &mut client),
-      ("head", Some(sub_matches)) => commands::commands(sub_matches, Commands::head, &mut client),
-      ("ls", Some(sub_matches)) => commands::commands(sub_matches, Commands::ls, &mut client),
-      ("mb", Some(sub_matches)) => commands::commands(sub_matches, Commands::mb, &mut client),
-      ("rb", Some(sub_matches)) => commands::commands(sub_matches, Commands::rb, &mut client),
-      ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
-      ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
-      ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
-      ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
-      ("get", Some(sub_matches)) => commands::commands(sub_matches, Commands::get, &mut client),
-      ("put", Some(sub_matches)) => commands::commands(sub_matches, Commands::put, &mut client),
-      (e, _) => {
-        println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
-        Err(S3Error::new("A valid instruction is required"))
-      },
+        ("abort", Some(sub_matches)) => commands::commands(sub_matches, Commands::abort, &mut client),
+        ("acl", Some(sub_matches)) => commands::commands(sub_matches, Commands::acl, &mut client),
+        ("get", Some(sub_matches)) => commands::commands(sub_matches, Commands::get, &mut client),
+        ("head", Some(sub_matches)) => commands::commands(sub_matches, Commands::head, &mut client),
+        ("ls", Some(sub_matches)) => commands::commands(sub_matches, Commands::ls, &mut client),
+        ("mb", Some(sub_matches)) => commands::commands(sub_matches, Commands::mb, &mut client),
+        ("put", Some(sub_matches)) => commands::commands(sub_matches, Commands::put, &mut client),
+        ("range", Some(sub_matches)) => commands::commands(sub_matches, Commands::range, &mut client),
+        ("rb", Some(sub_matches)) => commands::commands(sub_matches, Commands::rb, &mut client),
+        ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
+        ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
+        ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
+        ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
+        (e, _) => {
+            println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
+            Err(S3Error::new("A valid instruction is required"))
+        },
     };
 
     if let Err(e) = res {
-      println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
-      println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
-      ::std::process::exit(1);
+        println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
+        println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
+        ::std::process::exit(1);
     }
 }
