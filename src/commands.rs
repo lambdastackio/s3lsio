@@ -83,6 +83,8 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             let mut path = matches.value_of("path").unwrap_or("").to_string();
             if path.is_empty() {
                 path = last.to_string();
+            } else {
+                path = format!("{}{}{}", path, if path.ends_with('/') {""} else {"/"}, last);
             }
             if client.is_time {
                 let mut operation: Operation;
@@ -107,8 +109,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                         // Could have already been serialized before being passed to this function.
                         println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
                     },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
+                    _ => {},
                 }
             } else {
                 let result = get_object(bucket, &object, &path, None, client);
@@ -142,8 +143,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                             // Could have already been serialized before being passed to this function.
                             println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
                         },
-                        OutputFormat::None => {},
-                        OutputFormat::NoneAll => {},
+                        _ => {},
                     }
                 } else {
                     let compute_hash: bool = false; // Change this to an option via the config
@@ -382,8 +382,7 @@ fn get_bucket_versioning<P, D>(bucket: &str, client: &Client<P, D>) -> Result<()
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
             Ok(())
         },
@@ -441,8 +440,7 @@ fn get_buckets_list<P, D>(client: &Client<P, D>) -> Result<(), S3Error>
                         println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/", bucket.name);
                     }
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
             Ok(())
         },
@@ -508,8 +506,7 @@ fn set_bucket_acl<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D
                     OutputFormat::Simple => {
                         println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&acl));
                     },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
+                    _ => {},
                 }
             }
         },
@@ -598,8 +595,7 @@ fn get_object_list<P, D>(bucket: &str, prefix: &str, list_version: u16, client: 
                         println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
                     }
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
 
             Ok(())
@@ -651,8 +647,7 @@ fn get_object_version_list<P, D>(bucket: &str,
                     // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
                     // }
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
 
             Ok(())
@@ -700,8 +695,7 @@ fn get_object_multipart_list<P, D>(bucket: &str, upload_id: &str, key: &str, cli
                         // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
                         // }
                     },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
+                    _ => {},
                 }
 
                 Ok(())
@@ -744,8 +738,7 @@ fn get_object_multipart_list<P, D>(bucket: &str, upload_id: &str, key: &str, cli
                         // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
                         // }
                     },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
+                    _ => {},
                 }
 
                 Ok(())
@@ -810,8 +803,7 @@ fn object_get<P, D>(request: &GetObjectRequest,
                             OutputFormat::Simple => {
                                 println_color_quiet!(client.is_quiet, client.output.color, "Success");
                             },
-                            OutputFormat::None => {},
-                            OutputFormat::NoneAll => {},
+                            _ => {},
                         }
                         Ok(())
                     },
@@ -881,8 +873,7 @@ fn get_object_head<P, D>(bucket: &str, object: &str, client: &Client<P, D>) -> R
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
             Ok(())
         },
@@ -923,8 +914,7 @@ fn get_object_acl<P, D>(bucket: &str, object: &str, client: &Client<P, D>) -> Re
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
             Ok(())
         },
@@ -991,8 +981,7 @@ fn put_object<P, D>(bucket: &str,
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
             Ok(())
         },
@@ -1034,8 +1023,7 @@ fn abort_multipart_upload<P, D>(bucket: &str, object: &str, id: &str, client: &C
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
         },
         Err(e) => {
@@ -1143,8 +1131,7 @@ fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: 
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", new_output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
         },
         Err(e) => {
@@ -1196,8 +1183,7 @@ fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: 
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
         },
         Err(e) => {
@@ -1246,8 +1232,7 @@ fn delete_object<P, D>(bucket: &str,
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
         },
         Err(e) => {

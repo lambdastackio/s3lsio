@@ -21,8 +21,11 @@ use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::fs::File;
 use std::ffi::OsStr;
-use md5;
+use std::thread;
 
+use time::{Duration, SteadyTime};
+
+use md5;
 use term;
 use rustc_serialize::json;
 use rustc_serialize::base64::{STANDARD, ToBase64};
@@ -44,14 +47,25 @@ use Commands;
 // 5MB minimum size for multipart_uploads. Only last part can be less.
 const PART_SIZE_MIN: u64 = 5242880;
 
-/// Commands
-pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P, D>) -> Result<(), S3Error>
+/// Benchmarking - This benchmarking is for the server only and not the app. Thus, only the
+/// last library layer (hyper) is measured and not any local disk activity so that a more accurate
+/// measurement can be taken.
+///
+/// Benchmarks do not write the data to disk after GETs like a normal operation does. It does
+/// however create synthetic data in a temporary directory that is specified.
+///
+pub fn commands<'a, P, D>(matches: &ArgMatches,
+                          cmd: Commands,
+                          duration: i64,
+                          iterations: u64,
+                          virtual_users: u32,
+                          operations: &'a mut Vec<Operation>,
+                          client: &mut Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
     let mut bucket: &str = "";
     let mut object: String = "".to_string();
-    let mut last: &str = "";
     // Make sure the s3 schema prefix is present
     let (scheme, tmp_bucket) = matches.value_of("bucket").unwrap_or("s3:// ").split_at(5);
 
@@ -69,7 +83,6 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                 }
                 object_first = false;
                 object += part;
-                last = part;
             }
             first = false;
         }
@@ -80,590 +93,88 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
 
     match cmd {
         Commands::get => {
-            let mut path = matches.value_of("path").unwrap_or("").to_string();
-            if path.is_empty() {
-                path = last.to_string();
-            }
-            if client.is_time {
-                let mut operation: Operation;
-                operation = Operation::default();
-                let result = get_object(bucket, &object, &path, Some(&mut operation), client);
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:?}", operation);
-                    },
-                    OutputFormat::JSON => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                    },
-                    OutputFormat::PrettyJSON => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                    },
-                    OutputFormat::Simple => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                    },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
-                }
-            } else {
-                let result = get_object(bucket, &object, &path, None, client);
-            }
-            Ok(())
+            let result = get_bench(bucket, "file", duration, iterations, operations, client);
         },
         Commands::put => {
             let path = matches.value_of("path").unwrap_or("");
             let part_size: u64 = matches.value_of("size").unwrap_or("0").parse().unwrap_or(0);
-            if client.is_time {
-                let mut operation: Operation;
-                operation = Operation::default();
-                if part_size < PART_SIZE_MIN {
-                    let result = put_object(bucket, &object, path, Some(&mut operation), client);
-                    match client.output.format {
-                        OutputFormat::Serialize => {
-                            // Could have already been serialized before being passed to this function.
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                        },
-                        OutputFormat::Plain => {
-                            // Could have already been serialized before being passed to this function.
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:?}", operation);
-                        },
-                        OutputFormat::JSON => {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                        },
-                        OutputFormat::PrettyJSON => {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                        },
-                        OutputFormat::Simple => {
-                            // Could have already been serialized before being passed to this function.
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                        },
-                        OutputFormat::None => {},
-                        OutputFormat::NoneAll => {},
-                    }
-                } else {
-                    let compute_hash: bool = false; // Change this to an option via the config
-                    let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
-                }
+            let mut operation: Operation;
+            operation = Operation::default();
+            if part_size < PART_SIZE_MIN {
+                let result = put_object(bucket, &object, path, Some(&mut operation), client);
             } else {
-                if part_size < PART_SIZE_MIN {
-                    let result = put_object(bucket, &object, path, None, client);
-                } else {
-                    let compute_hash: bool = false; // Change this to an option via the config
-                    let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
-                }
+                let compute_hash: bool = false; // Change this to an option via the config
+                let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
             }
-            Ok(())
         },
         Commands::range => {
             let offset: u64 = matches.value_of("offset").unwrap_or("0").parse().unwrap_or(0);
             let len: u64 = matches.value_of("len").unwrap_or("0").parse().unwrap_or(0);
-            let mut path = matches.value_of("path").unwrap_or("").to_string();
-            if path.is_empty() {
-                path = last.to_string();
-            }
             if len == 0 {
                 let error = format!("Error Byte-Range request: Len must be > 0");
                 println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
                 return Err(S3Error::new(error));
             }
             let mut operation = Operation::default();
-            let result = get_object_range(bucket, &object, offset, len, &path, Some(&mut operation), client);
+            let result = get_object_range(bucket, &object, offset, len, Some(&mut operation), client);
             println!("{:#?}", operation);
-            Ok(())
         },
         Commands::rm => {
             let version = matches.value_of("version").unwrap_or("");
             let mut operation = Operation::default();
             let result = delete_object(bucket, &object, version, Some(&mut operation), client);
             println!("{:#?}", operation);
-            Ok(())
         },
-    };
-
-    Ok(())
-}
-
-fn create_bucket<P, D>(bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut request = CreateBucketRequest::default();
-    request.bucket = bucket.to_string();
-
-    match client.s3client.create_bucket(&request) {
-        Ok(_) => {
-            if (client.output.format != OutputFormat::None) || (client.output.format != OutputFormat::NoneAll) {
-                println_color_quiet!(client.is_quiet, client.output.color, "Success");
-            }
-            Ok(())
-        },
-        Err(e) => {
-            let error = format!("{:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            Err(S3Error::new(error))
-        },
-    }
-}
-
-fn delete_bucket<P, D>(bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let request = DeleteBucketRequest { bucket: bucket.to_string() };
-
-    match client.s3client.delete_bucket(&request) {
-        Ok(_) => {
-            if (client.output.format != OutputFormat::None) || (client.output.format != OutputFormat::NoneAll) {
-                println_color_quiet!(client.is_quiet, client.output.color, "Success");
-            }
-            Ok(())
-        },
-        Err(e) => {
-            let error = format!("{:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            Err(S3Error::new(error))
-        },
-    }
-}
-
-// Get functions...
-fn get_bucket_head<P, D>(bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let request = HeadBucketRequest { bucket: bucket.to_string() };
-
-    match client.s3client.head_bucket(&request) {
-        Ok(_) => {
-            if (client.output.format != OutputFormat::None) || (client.output.format != OutputFormat::NoneAll) {
-                // May want to put in json format later??
-                println_color_quiet!(client.is_quiet, client.output.color, "Bucket exists");
-            }
-            Ok(())
-        },
-        Err(e) => {
-            let error = format!("{:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            Err(S3Error::new(error))
-        },
-    }
-}
-
-fn get_bucket_versioning<P, D>(bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let request = GetBucketVersioningRequest { bucket: bucket.to_string() };
-
-    match client.s3client.get_bucket_versioning(&request) {
-        Ok(output) => {
-            match client.output.format {
-                OutputFormat::Serialize => {
-                    // Could have already been serialized before being passed to this function.
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::Plain => {
-                    // Could have already been serialized before being passed to this function.
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::JSON => {
-                    println_color_quiet!(client.is_quiet,
-                                         client.output.color,
-                                         "{}",
-                                         json::encode(&output).unwrap_or("{}".to_string()));
-                },
-                OutputFormat::PrettyJSON => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                },
-                OutputFormat::Simple => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
-            }
-            Ok(())
-        },
-        Err(e) => {
-            let error = format!("{:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            Err(S3Error::new(error))
-        },
-    }
-}
-
-fn get_bucket_acl<P, D>(bucket: &str, client: &Client<P, D>) -> Result<AccessControlPolicy, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut request = GetBucketAclRequest::default();
-    request.bucket = bucket.to_string();
-
-    match client.s3client.get_bucket_acl(&request) {
-        Ok(acl) => Ok(acl),
-        Err(e) => {
-            let error = format!("{:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            Err(S3Error::new(error))
-        },
-    }
-}
-
-fn get_buckets_list<P, D>(client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    match client.s3client.list_buckets() {
-        Ok(output) => {
-            match client.output.format {
-                OutputFormat::Serialize => {
-                    // Could have already been serialized before being passed to this function.
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::Plain => {
-                    // Could have already been serialized before being passed to this function.
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::JSON => {
-                    println_color_quiet!(client.is_quiet,
-                                         client.output.color,
-                                         "{}",
-                                         json::encode(&output).unwrap_or("{}".to_string()));
-                },
-                OutputFormat::PrettyJSON => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                },
-                OutputFormat::Simple => {
-                    for bucket in output.buckets {
-                        println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/", bucket.name);
-                    }
-                },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
-            }
-            Ok(())
-        },
-        Err(e) => {
-            let format = format!("{:#?}", e);
-            let error = S3Error::new(format);
-            println_color_quiet!(client.is_quiet, client.error.color, "{:?}", error);
-            Err(error)
-        },
-    }
-}
-
-// Set functions...
-fn set_bucket_acl<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-
-    let acl: CannedAcl;
-    let cli_acl = matches.value_of("acl").unwrap_or("").to_string().to_lowercase();
-
-    match cli_acl.as_ref() {
-        "public-read" => acl = CannedAcl::PublicRead,
-        "public-rw" => acl = CannedAcl::PublicReadWrite,
-        "public-readwrite" => acl = CannedAcl::PublicReadWrite,
-        "private" => acl = CannedAcl::Private,
-        _ => {
-            println_color_quiet!(client.is_quiet,
-                                 client.error.color,
-                                 "missing acl: public-read, public-rw, public-readwrite or private");
-            return Err(S3Error::new("missing acl: public-read, public-rw, public-readwrite or private"));
-        },
-    }
-
-    let mut request = PutBucketAclRequest::default();
-    request.bucket = bucket.to_string();
-
-    // get acl option...
-    request.acl = Some(acl);
-
-    match client.s3client.put_bucket_acl(&request) {
-        Ok(output) => {
-            let acl = get_bucket_acl(bucket, client);
-            if let Ok(acl) = acl {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", acl);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", acl);
-                    },
-                    OutputFormat::JSON => {
-                        println_color_quiet!(client.is_quiet,
-                                             client.output.color,
-                                             "{}",
-                                             json::encode(&acl).unwrap_or("{}".to_string()));
-                    },
-                    OutputFormat::PrettyJSON => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&acl));
-                    },
-                    OutputFormat::Simple => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&acl));
-                    },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
-                }
-            }
-        },
-        Err(e) => {
-            let error = format!("{:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            return Err(S3Error::new(error));
-        },
+        _ => {}
     }
 
     Ok(())
 }
 
-fn set_bucket_versioning<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
+fn get_bench<'a, P, D>(bucket: &str,
+                       base_object_name: &str,
+                       duration: i64,
+                       iterations: u64,
+                       operations: &'a mut Vec<Operation>,
+                       client: &Client<P, D>) -> Result<(), S3Error>
+                       where P: AwsCredentialsProvider,
+                             D: DispatchSignedRequest,
 {
-    let cli_ver = matches.value_of("ver").unwrap_or("").to_string().to_lowercase();
+    let mut object: String;
 
-    let request = PutBucketVersioningRequest {
-        bucket: bucket.to_string(),
-        versioning_configuration: VersioningConfiguration {
-            status: if cli_ver == "on" {
-                "Enabled".to_string()
-            } else {
-                "Suspended".to_string()
-            },
-            mfa_delete: "".to_string(),
-        },
-        mfa: None,
-        content_md5: None,
-    };
-
-    match client.s3client.put_bucket_versioning(&request) {
-        Ok(()) => {
-            if (client.output.format != OutputFormat::None) || (client.output.format != OutputFormat::NoneAll) {
-                println_color_quiet!(client.is_quiet, client.output.color, "Success");
-            }
-            Ok(())
-        },
-        Err(e) => {
-            println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-            Err(e)
-        },
-    }
-}
-
-
-// Objects...
-fn get_object_list<P, D>(bucket: &str, prefix: &str, list_version: u16, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut request = ListObjectsRequest::default();
-    request.bucket = bucket.to_string();
-    if !prefix.is_empty() {
-        request.prefix = Some(prefix.to_string()); //Some(format!("/{}", prefix));
-        println!("{:?}", request);
-    }
-    if list_version == 2 {
-        request.version = Some(2);
-    } // default to original version of list bucket
-
-    match client.s3client.list_objects(&request) {
-        Ok(output) => {
-            match client.output.format {
-                OutputFormat::Serialize => {
-                    // Could have already been serialized before being passed to this function.
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::Plain => {
-                    // Could have already been serialized before being passed to this function.
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::JSON => {
-                    println_color_quiet!(client.is_quiet,
-                                         client.output.color,
-                                         "{}",
-                                         json::encode(&output).unwrap_or("{}".to_string()));
-                },
-                OutputFormat::PrettyJSON => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                },
-                OutputFormat::Simple => {
-                    for object in output.contents {
-                        println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
-                    }
-                },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
-            }
-
-            Ok(())
-        },
-        Err(error) => {
-            let format = format!("{:#?}", error);
-            let error = S3Error::new(format);
-            println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-            Err(error)
-        },
-    }
-}
-
-fn get_object_version_list<P, D>(bucket: &str,
-                                 prefix: &str,
-                                 version: &str,
-                                 client: &Client<P,D>)
-                                 -> Result<(), S3Error>
-                                 where P: AwsCredentialsProvider,
-                                       D: DispatchSignedRequest {
-    let mut request = ListObjectVersionsRequest::default();
-    request.bucket = bucket.to_string();
-    if !prefix.is_empty() {
-        request.prefix = Some(prefix.to_string());
-    }
-
-    match client.s3client.list_object_versions(&request) {
-        Ok(output) => {
-            match client.output.format {
-                OutputFormat::Serialize => {
-                    // Could have already been serialized before being passed to this function.
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::Plain => {
-                    // Could have already been serialized before being passed to this function.
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::JSON => {
-                    println_color_quiet!(client.is_quiet,
-                                         client.output.color,
-                                         "{}",
-                                         json::encode(&output).unwrap_or("{}".to_string()));
-                },
-                OutputFormat::PrettyJSON => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                },
-                OutputFormat::Simple => {
-                    // for object in output.contents {
-                    // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
-                    // }
-                },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
-            }
-
-            Ok(())
-        },
-        Err(error) => {
-            let format = format!("{:#?}", error);
-            let error = S3Error::new(format);
-            println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-            Err(error)
-        },
-    }
-}
-
-fn get_object_multipart_list<P, D>(bucket: &str, upload_id: &str, key: &str, client: &Client<P, D>)
-                                   -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    if upload_id.is_empty() {
-        let mut request = MultipartUploadListRequest::default();
-        request.bucket = bucket.to_string();
-
-        match client.s3client.multipart_upload_list(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                    },
-                    OutputFormat::JSON => {
-                        println_color_quiet!(client.is_quiet,
-                                             client.output.color,
-                                             "{}",
-                                             json::encode(&output).unwrap_or("{}".to_string()));
-                    },
-                    OutputFormat::PrettyJSON => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                    },
-                    OutputFormat::Simple => {
-                        // for object in output.contents {
-                        // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
-                        // }
-                    },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
-                }
-
-                Ok(())
-            },
-            Err(error) => {
-                let format = format!("{:#?}", error);
-                let error = S3Error::new(format);
-                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-                Err(error)
-            },
+    if iterations > 0 {
+        for i in 0..iterations {
+            let mut operation: Operation;
+            operation = Operation::default();
+            object = format!("{}{}", base_object_name, i);
+            let result = get_object(bucket, &object, Some(&mut operation), client);
+            operations.push(operation);
         }
-    } else {
-        let mut request = MultipartUploadListPartsRequest::default();
-        request.bucket = bucket.to_string();
-        request.upload_id = upload_id.to_string();
-        request.key = key.to_string();
+    } else if duration > 0 {
+        let mut count: u64 = 0;
+        let dur = Duration::seconds(duration);
+        let start_time = SteadyTime::now();
+        let end_time = start_time + dur;
 
-        match client.s3client.multipart_upload_list_parts(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                    },
-                    OutputFormat::JSON => {
-                        println_color_quiet!(client.is_quiet,
-                                             client.output.color,
-                                             "{}",
-                                             json::encode(&output).unwrap_or("{}".to_string()));
-                    },
-                    OutputFormat::PrettyJSON => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                    },
-                    OutputFormat::Simple => {
-                        // for object in output.contents {
-                        // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
-                        // }
-                    },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
-                }
-
-                Ok(())
-            },
-            Err(e) => {
-                let error = format!("{:#?}", e);
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                Err(S3Error::new(error))
-            },
+        loop {
+            let mut operation: Operation;
+            operation = Operation::default();
+            object = format!("{}{}", base_object_name, count);
+            let result = get_object(bucket, &object, Some(&mut operation), client);
+            operations.push(operation);
+            if SteadyTime::now() >= end_time {
+                break;
+            }
+            count += 1;
         }
     }
+
+    Ok(())
 }
 
 // Limited in file size.
 fn get_object<P, D>(bucket: &str,
                     object: &str,
-                    path: &str,
                     operation: Option<&mut Operation>,
                     client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
@@ -673,12 +184,11 @@ fn get_object<P, D>(bucket: &str,
     request.bucket = bucket.to_string();
     request.key = object.to_string();
 
-    object_get(&request, path, operation, client)
+    object_get(&request, operation, client)
 }
 
 // Common portion of get_object... functions
 fn object_get<P, D>(request: &GetObjectRequest,
-                    path: &str,
                     operation: Option<&mut Operation>,
                     client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
@@ -687,44 +197,7 @@ fn object_get<P, D>(request: &GetObjectRequest,
 
     match client.s3client.get_object(&request, operation) {
         Ok(output) => {
-            // NoneAll means no writing to disk or stdout
-            if client.output.format != OutputFormat::NoneAll {
-                let mut file = File::create(path).unwrap();
-                match file.write_all(&output.body) {
-                    Ok(_) => {
-                        // NOTE: Need to remove body from output (after it writes out) by making it mut so that
-                        // items below can output metadata OR place body in different element than others.
-                        match client.output.format {
-                            // NOTE: Operation use of SteadyTime can be (by default) be serialized w/o effort :(
-                            OutputFormat::Serialize => {
-                                println_color_quiet!(client.is_quiet, client.output.color, "Success");
-                            },
-                            OutputFormat::Plain => {
-                                println_color_quiet!(client.is_quiet, client.output.color, "Success");
-                            },
-                            OutputFormat::JSON => {
-                                println_color_quiet!(client.is_quiet, client.output.color, "Success");
-                            },
-                            OutputFormat::PrettyJSON => {
-                                println_color_quiet!(client.is_quiet, client.output.color, "Success");
-                            },
-                            OutputFormat::Simple => {
-                                println_color_quiet!(client.is_quiet, client.output.color, "Success");
-                            },
-                            OutputFormat::None => {},
-                            OutputFormat::NoneAll => {},
-                        }
-                        Ok(())
-                    },
-                    Err(e) => {
-                        let error = format!("{:#?}", e);
-                        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                        Err(S3Error::new(error))
-                    },
-                }
-            } else {
-                Ok(())
-            }
+            Ok(())
         },
         Err(e) => {
             let error = format!("{:#?}", e);
@@ -738,7 +211,6 @@ fn get_object_range<P, D>(bucket: &str,
                           object: &str,
                           offset: u64,
                           len: u64,
-                          path: &str,
                           operation: Option<&mut Operation>,
                           client: &Client<P, D>)
                           -> Result<(), S3Error>
@@ -750,91 +222,7 @@ fn get_object_range<P, D>(bucket: &str,
     request.key = object.to_string();
     request.range = Some(format!("bytes={}-{}", offset, len));
 
-    object_get(&request, path, operation, client)
-}
-
-fn get_object_head<P, D>(bucket: &str, object: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut request = HeadObjectRequest::default();
-    request.bucket = bucket.to_string();
-    request.key = object.to_string();
-
-    match client.s3client.head_object(&request) {
-        Ok(output) => {
-            match client.output.format {
-                OutputFormat::Serialize => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::Plain => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::JSON => {
-                    println_color_quiet!(client.is_quiet,
-                                         client.output.color,
-                                         "{}",
-                                         json::encode(&output).unwrap_or("{}".to_string()));
-                },
-                OutputFormat::PrettyJSON => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                },
-                OutputFormat::Simple => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
-            }
-            Ok(())
-        },
-        Err(e) => {
-            let error = format!("{:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            Err(S3Error::new(error))
-        },
-    }
-}
-
-fn get_object_acl<P, D>(bucket: &str, object: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut request = GetObjectAclRequest::default();
-    request.bucket = bucket.to_string();
-    request.key = object.to_string();
-
-    match client.s3client.get_object_acl(&request) {
-        Ok(output) => {
-            match client.output.format {
-                OutputFormat::Serialize => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::Plain => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::JSON => {
-                    println_color_quiet!(client.is_quiet,
-                                         client.output.color,
-                                         "{}",
-                                         json::encode(&output).unwrap_or("{}".to_string()));
-                },
-                OutputFormat::PrettyJSON => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                },
-                OutputFormat::Simple => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
-            }
-            Ok(())
-        },
-        Err(e) => {
-            let error = format!("{:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            Err(S3Error::new(error))
-        },
-    }
+    object_get(&request, operation, client)
 }
 
 // Limited in file size. Max is 5GB but should use Multipart upload for larger than 15MB.
@@ -892,8 +280,7 @@ fn put_object<P, D>(bucket: &str,
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
             Ok(())
         },
@@ -935,8 +322,7 @@ fn abort_multipart_upload<P, D>(bucket: &str, object: &str, id: &str, client: &C
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
         },
         Err(e) => {
@@ -1044,8 +430,7 @@ fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: 
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", new_output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
         },
         Err(e) => {
@@ -1097,8 +482,7 @@ fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: 
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
         },
         Err(e) => {
@@ -1147,8 +531,7 @@ fn delete_object<P, D>(bucket: &str,
                 OutputFormat::Simple => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
                 },
-                OutputFormat::None => {},
-                OutputFormat::NoneAll => {},
+                _ => {},
             }
         },
         Err(e) => {

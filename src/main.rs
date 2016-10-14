@@ -49,8 +49,9 @@ extern crate clap;
 extern crate pbr;
 extern crate toml;
 extern crate md5;
+extern crate time;
 
-use std::time::{Duration, SystemTime};
+//use std::time::{Duration, SystemTime};
 use std::io::{self, Write};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -73,11 +74,13 @@ mod common;
 mod cli;
 mod config;
 mod commands;
+mod bench;
 
 /// Allows you to set the output type for stderr and stdout.
 ///
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OutputFormat {
+    CSV,
     JSON,
     PrettyJSON,
     Plain,
@@ -113,6 +116,7 @@ pub enum Commands {
 
 /// Allows you to control Error output.
 ///
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Error {
     /// Defaults to OutputFormat::serialize since it's easier to debug.
     ///
@@ -124,6 +128,7 @@ pub struct Error {
 
 /// Allows you to control non-Error output.
 ///
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Output {
     /// Defaults to OutputFormat::plain.
     ///
@@ -134,28 +139,46 @@ pub struct Output {
     pub color: term::color::Color,
 }
 
+/// Allows you to control Benchmarking output.
+///
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BenchOutput {
+    /// Defaults to OutputFormat::plain.
+    ///
+    /// Available formats are json, plain, serialize or none (don't output anything).
+    /// If plain is used then you can serialize structures with format! and then pass the output.
+    pub format: OutputFormat,
+    /// Can be any term color. Defaults to term::color::GREEN.
+    pub color: term::color::Color,
+}
+
+
 /// Allows for duration tracking of operations. You should not track time of this app running but
 /// of each operation and then the summation of the durations plus latency etc.
 ///
-/*
-#[derive(Debug, Clone)]
-pub struct Operation {
-    /// request
+
+#[derive(Debug, Clone, RustcDecodable, RustcEncodable)]
+pub struct BenchOperation {
+    /// Request (endpoint + path)
     pub request: String,
     /// Endpoint URL
     pub endpoint: String,
     /// GET, PUT, DELETE...
-    pub verb: String,
+    pub method: String,
     /// If the operation succeeded or not
     pub success: bool,
     /// HTTP return code
     pub code: u16,
+    /// Size of payload
+    pub payload_size: u64,
     /// System time of beginning of actual operation (not time spent on condition logic, etc)
-    pub start_time: SystemTime,
+    pub start_time: String,
     /// System time of end of actual operation (not time spent on condition logic, etc)
-    pub end_time: SystemTime,
+    pub end_time: String,
+    /// Duration of operation
+    pub duration: String,
 }
-*/
+
 /// Client structure holds a reference to the S3Client which also implements two traits:
 /// AwsCredentialsProvider and DispatchSignedRequest
 /// Since S3Client struct is takes those two traits as parameters then ALL functions called
@@ -168,18 +191,21 @@ pub struct Client<'a, P: 'a, D: 'a>
           D: DispatchSignedRequest, // T: Write,
 {
     pub s3client: &'a mut S3Client<P, D>,
-    pub operations: Option<&'a mut Vec<Operation>>,
+    //pub operations: Option<&'a mut Vec<Operation>>,
     pub config: &'a mut config::Config, // pub pbr: ProgressBar<T>,
     pub error: Error,
     pub output: Output,
     pub is_quiet: bool,
     pub is_time: bool,
+    pub is_bench: bool,
+    pub bench: &'a str,
 }
 
 fn main() {
     // Gets overridden by cli option
     let mut is_quiet: bool = false;
     let mut is_time: bool = false;
+    let mut is_bench: bool = false;
 
     env_logger::init().unwrap();
 
@@ -239,7 +265,16 @@ fn main() {
     let signature_str = matches.value_of("signature");
     let bench = matches.value_of("bench");
 
-    let output = match matches.value_of("output").unwrap().to_string().to_lowercase().as_ref() {
+    // Override some parameters when bench is specified...
+    if bench.is_some() {
+        is_quiet = true;
+        is_time = true;
+        is_bench = true;
+    }
+
+    // NOTE: May want to create a new output-bench-format for just csv, json, pretty-json and plain
+    let output_format = match matches.value_of("output-format").unwrap().to_string().to_lowercase().as_ref() {
+        "csv" => OutputFormat::CSV,
         "json" => OutputFormat::JSON,
         "none" => OutputFormat::None,
         "noneall" => OutputFormat::NoneAll,
@@ -299,37 +334,40 @@ fn main() {
                                  Some(format!("s3lsio - {}", version)));
 
     let mut s3client = S3Client::new(provider, endpoint);
-    let mut operation: Vec<Operation>;
-    let operations: Option<&mut Vec<Operation>>;
-    if bench.is_some() {
-        operation = Vec::new();
-        operations = Some(&mut operation);
-    } else {
-        operations = None;
-    }
+
+    let output = Output{format: output_format, color: output_color};
+    let bench_output = BenchOutput{format: output_format, color: output_color};
 
     let mut client = Client {
         s3client: &mut s3client,
         config: &mut config,
-        operations: operations,
         error: Error {
             format: OutputFormat::Serialize,
             color: term::color::RED,
         },
-        output: Output {
-            format: output,
-            color: output_color,
-        },
+        output: output,
         is_quiet: is_quiet,
         is_time: is_time,
+        is_bench: is_bench,
+        bench: bench.unwrap_or(""),
     };
 
-    if bench.is_some() {
+    if is_bench {
+        let options: Vec<&str> = bench.unwrap().split(':').collect();
+        let duration: i64 = options[0].parse().unwrap_or(0);
+        let iterations: u64 = options[1].parse().unwrap_or(0);
+        let virtual_users: u32 = options[2].parse().unwrap_or(0);
+
+        let mut operations: Vec<Operation> = Vec::new();
         let res = match matches.subcommand() {
-            ("get", Some(sub_matches)) => commands::commands(sub_matches, Commands::get, &mut client),
-            ("put", Some(sub_matches)) => commands::commands(sub_matches, Commands::put, &mut client),
-            ("range", Some(sub_matches)) => commands::commands(sub_matches, Commands::range, &mut client),
-            ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
+            ("get", Some(sub_matches)) => {
+                let result = bench::commands(sub_matches, Commands::get, duration, iterations, virtual_users, &mut operations, &mut client);
+                bench_results(&mut operations, bench_output);
+                result
+            },
+            ("put", Some(sub_matches)) => bench::commands(sub_matches, Commands::put, duration, iterations, virtual_users, &mut operations, &mut client),
+            ("range", Some(sub_matches)) => bench::commands(sub_matches, Commands::range, duration, iterations, virtual_users, &mut operations, &mut client),
+            ("rm", Some(sub_matches)) => bench::commands(sub_matches, Commands::rm, duration, iterations, virtual_users, &mut operations, &mut client),
             (e, _) => {
                 println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
                 Err(S3Error::new("A valid benchmarking instruction is required"))
@@ -368,4 +406,14 @@ fn main() {
             ::std::process::exit(1);
         }
     }
+}
+
+fn bench_results<'a>(operations: &'a mut Vec<Operation>,
+                     output: BenchOutput) -> () {
+    // Convert operations to BenchOperations
+    // Create a summary struct and serialize it
+    // Calculate items
+    // Add summary struct to output and produce output
+
+    //println_color!(output.color, )
 }
