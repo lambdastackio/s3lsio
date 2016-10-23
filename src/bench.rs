@@ -22,8 +22,7 @@ use std::path::Path;
 use std::fs::File;
 use std::ffi::OsStr;
 use std::thread;
-
-use time::{Duration, SteadyTime};
+use std::time::{Duration, Instant};
 
 use md5;
 use term;
@@ -44,9 +43,6 @@ use Output;
 use OutputFormat;
 use Commands;
 
-// 5MB minimum size for multipart_uploads. Only last part can be less.
-const PART_SIZE_MIN: u64 = 5242880;
-
 /// Benchmarking - This benchmarking is for the server only and not the app. Thus, only the
 /// last library layer (hyper) is measured and not any local disk activity so that a more accurate
 /// measurement can be taken.
@@ -54,15 +50,17 @@ const PART_SIZE_MIN: u64 = 5242880;
 /// Benchmarks do not write the data to disk after GETs like a normal operation does. It does
 /// however create synthetic data in a temporary directory that is specified.
 ///
-pub fn commands<'a, P, D>(matches: &ArgMatches,
-                          cmd: Commands,
-                          duration: i64,
-                          iterations: u64,
-                          virtual_users: u32,
-                          operations: &'a mut Vec<Operation>,
-                          client: &mut Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
+pub fn commands<'a, 'b, P, D>(matches: &ArgMatches,
+                              cmd: Commands,
+                              duration: &'b Duration,
+                              iterations: u64,
+                              virtual_users: u32,
+                              len: u64,
+                              prefix: &str,
+                              operations: &'a mut Vec<Operation>,
+                              client: &Client<P, D>) -> Result<(), S3Error>
+                              where P: AwsCredentialsProvider,
+                                    D: DispatchSignedRequest,
 {
     let mut bucket: &str = "";
     let mut object: String = "".to_string();
@@ -91,21 +89,17 @@ pub fn commands<'a, P, D>(matches: &ArgMatches,
         object = "".to_string();
     }
 
+    // NOTE: Change the User-Agent to mean something in the logs
+    // S3lsio Benchmarking : <IP Address> : <User ???? - not sure if we want this>
+    // Separate each segment with : so that the logs can be easily grepped and awked etc.
+
     match cmd {
         Commands::get => {
-            let result = get_bench(bucket, "file", duration, iterations, operations, client);
+            let result = get_bench(bucket, prefix, &duration, iterations, operations, client);
         },
         Commands::put => {
             let path = matches.value_of("path").unwrap_or("");
-            let part_size: u64 = matches.value_of("size").unwrap_or("0").parse().unwrap_or(0);
-            let mut operation: Operation;
-            operation = Operation::default();
-            if part_size < PART_SIZE_MIN {
-                let result = put_object(bucket, &object, path, Some(&mut operation), client);
-            } else {
-                let compute_hash: bool = false; // Change this to an option via the config
-                let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
-            }
+            let result = put_bench(bucket, path, prefix, &duration, iterations, len, operations, client);
         },
         Commands::range => {
             let offset: u64 = matches.value_of("offset").unwrap_or("0").parse().unwrap_or(0);
@@ -119,26 +113,20 @@ pub fn commands<'a, P, D>(matches: &ArgMatches,
             let result = get_object_range(bucket, &object, offset, len, Some(&mut operation), client);
             println!("{:#?}", operation);
         },
-        Commands::rm => {
-            let version = matches.value_of("version").unwrap_or("");
-            let mut operation = Operation::default();
-            let result = delete_object(bucket, &object, version, Some(&mut operation), client);
-            println!("{:#?}", operation);
-        },
         _ => {}
     }
 
     Ok(())
 }
 
-fn get_bench<'a, P, D>(bucket: &str,
-                       base_object_name: &str,
-                       duration: i64,
-                       iterations: u64,
-                       operations: &'a mut Vec<Operation>,
-                       client: &Client<P, D>) -> Result<(), S3Error>
-                       where P: AwsCredentialsProvider,
-                             D: DispatchSignedRequest,
+fn get_bench<'a, 'b, P, D>(bucket: &str,
+                           base_object_name: &str,
+                           duration: &'b Duration,
+                           iterations: u64,
+                           operations: &'a mut Vec<Operation>,
+                           client: &Client<P, D>) -> Result<(), S3Error>
+                           where P: AwsCredentialsProvider,
+                                 D: DispatchSignedRequest,
 {
     let mut object: String;
 
@@ -146,23 +134,65 @@ fn get_bench<'a, P, D>(bucket: &str,
         for i in 0..iterations {
             let mut operation: Operation;
             operation = Operation::default();
-            object = format!("{}{}", base_object_name, i);
+            object = format!("{}{:04}", base_object_name, i);
             let result = get_object(bucket, &object, Some(&mut operation), client);
             operations.push(operation);
         }
-    } else if duration > 0 {
+    } else if duration.as_secs() > 0 {
         let mut count: u64 = 0;
-        let dur = Duration::seconds(duration);
-        let start_time = SteadyTime::now();
-        let end_time = start_time + dur;
+        let now = Instant::now();
 
         loop {
             let mut operation: Operation;
             operation = Operation::default();
-            object = format!("{}{}", base_object_name, count);
+            object = format!("{}{:04}", base_object_name, count);
             let result = get_object(bucket, &object, Some(&mut operation), client);
             operations.push(operation);
-            if SteadyTime::now() >= end_time {
+            if now.elapsed() >= *duration {
+                break;
+            }
+            count += 1;
+        }
+    }
+
+    Ok(())
+}
+
+fn put_bench<'a, 'b, P, D>(bucket: &str,
+                           path: &str,
+                           base_object_name: &str,
+                           duration: &'b Duration,
+                           iterations: u64,
+                           len: u64,
+                           operations: &'a mut Vec<Operation>,
+                           client: &Client<P, D>) -> Result<(), S3Error>
+                           where P: AwsCredentialsProvider,
+                                 D: DispatchSignedRequest,
+{
+    let mut key: String;
+    let mut object: String;
+
+    if iterations > 0 {
+        for i in 0..iterations {
+            let mut operation: Operation;
+            operation = Operation::default();
+            key = format!("{}{:04}", base_object_name, i);
+            object = format!("{}/{}", path, key);
+            let result = put_object(bucket, &key, &object, len, Some(&mut operation), client);
+            operations.push(operation);
+        }
+    } else if duration.as_secs() > 0 {
+        let mut count: u64 = 0;
+        let now = Instant::now();
+
+        loop {
+            let mut operation: Operation;
+            operation = Operation::default();
+            key = format!("{}{:04}", base_object_name, count);
+            object = format!("{}/{}", path, key);
+            let result = put_object(bucket, &key, &object, len, Some(&mut operation), client);
+            operations.push(operation);
+            if now.elapsed() >= *duration {
                 break;
             }
             count += 1;
@@ -177,8 +207,8 @@ fn get_object<P, D>(bucket: &str,
                     object: &str,
                     operation: Option<&mut Operation>,
                     client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
+                    where P: AwsCredentialsProvider,
+                          D: DispatchSignedRequest,
 {
     let mut request = GetObjectRequest::default();
     request.bucket = bucket.to_string();
@@ -191,10 +221,9 @@ fn get_object<P, D>(bucket: &str,
 fn object_get<P, D>(request: &GetObjectRequest,
                     operation: Option<&mut Operation>,
                     client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
+                    where P: AwsCredentialsProvider,
+                          D: DispatchSignedRequest,
 {
-
     match client.s3client.get_object(&request, operation) {
         Ok(output) => {
             Ok(())
@@ -214,8 +243,8 @@ fn get_object_range<P, D>(bucket: &str,
                           operation: Option<&mut Operation>,
                           client: &Client<P, D>)
                           -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
+                          where P: AwsCredentialsProvider,
+                                D: DispatchSignedRequest,
 {
     let mut request = GetObjectRequest::default();
     request.bucket = bucket.to_string();
@@ -229,22 +258,31 @@ fn get_object_range<P, D>(bucket: &str,
 fn put_object<P, D>(bucket: &str,
                     key: &str,
                     object: &str,
+                    len: u64,
                     operation: Option<&mut Operation>,
                     client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
+                    where P: AwsCredentialsProvider,
+                          D: DispatchSignedRequest,
 {
-    let file = File::open(object).unwrap();
-    let metadata = file.metadata().unwrap();
+    let mut buffer: Vec<u8>;
+    if len == 0 {
+        let file = File::open(object).unwrap();
+        let metadata = file.metadata().unwrap();
 
-    let mut buffer: Vec<u8> = Vec::with_capacity(metadata.len() as usize);
+        buffer = Vec::with_capacity(metadata.len() as usize);
 
-    match file.take(metadata.len()).read_to_end(&mut buffer) {
-        Ok(_) => {},
-        Err(e) => {
-            let error = format!("Error reading file {}", e);
-            return Err(S3Error::new(error));
-        },
+        match file.take(metadata.len()).read_to_end(&mut buffer) {
+            Ok(_) => {},
+            Err(e) => {
+                let error = format!("Error reading file {}", e);
+                return Err(S3Error::new(error));
+            },
+        }
+    } else {
+        buffer = Vec::with_capacity(len as usize);
+        for i in 0..len {
+            buffer.push(0);
+        }
     }
 
     let correct_key: String;
@@ -292,9 +330,12 @@ fn put_object<P, D>(bucket: &str,
     }
 }
 
-fn abort_multipart_upload<P, D>(bucket: &str, object: &str, id: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
+fn abort_multipart_upload<P, D>(bucket: &str,
+                                object: &str,
+                                id: &str,
+                                client: &Client<P, D>) -> Result<(), S3Error>
+                                where P: AwsCredentialsProvider,
+                                      D: DispatchSignedRequest,
 {
     let mut request = MultipartUploadAbortRequest::default();
     request.bucket = bucket.to_string();
@@ -342,11 +383,15 @@ fn abort_multipart_upload<P, D>(bucket: &str, object: &str, id: &str, client: &C
 ///
 /// You can also apply a bucket policy to automatically abort any uploads that have not completed
 /// after so many days.
-fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: u64, compute_hash: bool,
+fn put_multipart_upload<P, D>(bucket: &str,
+                              key: &str,
+                              object: &str,
+                              part_size: u64,
+                              compute_hash: bool,
                               client: &Client<P, D>)
                               -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
+                              where P: AwsCredentialsProvider,
+                                    D: DispatchSignedRequest,
 {
     let correct_key: String;
     if key.is_empty() {
@@ -487,55 +532,6 @@ fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: 
         },
         Err(e) => {
             let error = format!("Multipart-Upload Complete: {:#?}", e);
-            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-            return Err(S3Error::new(error));
-        },
-    }
-
-    Ok(())
-}
-
-fn delete_object<P, D>(bucket: &str,
-                       object: &str,
-                       version: &str,
-                       operation: Option<&mut Operation>,
-                       client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut request = DeleteObjectRequest::default();
-    request.bucket = bucket.to_string();
-    request.key = object.to_string();
-    if !version.is_empty() {
-        request.version_id = Some(version.to_string());
-    }
-
-    match client.s3client.delete_object(&request, operation) {
-        Ok(output) => {
-            match client.output.format {
-                OutputFormat::Serialize => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::Plain => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                OutputFormat::JSON => {
-                    println_color_quiet!(client.is_quiet,
-                                         client.output.color,
-                                         "{}",
-                                         json::encode(&output).unwrap_or("{}".to_string()));
-                },
-                OutputFormat::PrettyJSON => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                },
-                OutputFormat::Simple => {
-                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
-                },
-                _ => {},
-            }
-        },
-        Err(e) => {
-            let error = format!("{:#?}", e);
             println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
             return Err(S3Error::new(error));
         },

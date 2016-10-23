@@ -18,6 +18,9 @@ Install: [Cargo install s3lsio] OR download at http://www.lambdastack.io/s3lsio
 For help just run the cli: [s3lsio -h]
 """
 
+[features]
+nightly = []
+
 [dependencies]
 lsio = "0.1"
 aws-sdk-rust = "0.1"
@@ -33,4 +36,7 @@ rustc-serialize = "0.3"
 pbr = "0.3"
 toml = "0.2"
 md5 = "0.2"
+crossbeam = "0.2"
 time = "0.1"
+#serde = "0.8"
+#serde_json = "0.8"

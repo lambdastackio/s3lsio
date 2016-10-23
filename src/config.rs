@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
-use std::net::SocketAddrV4;
-use std::str::FromStr;
-
 use url::Url;
 use toml;
 

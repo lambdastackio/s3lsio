@@ -84,79 +84,64 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             if path.is_empty() {
                 path = last.to_string();
             } else {
-                path = format!("{}{}{}", path, if path.ends_with('/') {""} else {"/"}, last);
+                path = format!("{}{}{}",
+                               path,
+                               if path.ends_with('/') {
+                                   ""
+                               } else {
+                                   "/"
+                               },
+                               last);
             }
-            if client.is_time {
-                let mut operation: Operation;
-                operation = Operation::default();
-                let result = get_object(bucket, &object, &path, Some(&mut operation), client);
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:?}", operation);
-                    },
-                    OutputFormat::JSON => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                    },
-                    OutputFormat::PrettyJSON => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                    },
-                    OutputFormat::Simple => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                    },
-                    _ => {},
-                }
-            } else {
-                let result = get_object(bucket, &object, &path, None, client);
-            }
+
+            cmd_get(bucket, &object, &path, client);
             Ok(())
         },
         Commands::put => {
             let path = matches.value_of("path").unwrap_or("");
             let part_size: u64 = matches.value_of("size").unwrap_or("0").parse().unwrap_or(0);
-            if client.is_time {
-                let mut operation: Operation;
-                operation = Operation::default();
-                if part_size < PART_SIZE_MIN {
-                    let result = put_object(bucket, &object, path, Some(&mut operation), client);
-                    match client.output.format {
-                        OutputFormat::Serialize => {
-                            // Could have already been serialized before being passed to this function.
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                        },
-                        OutputFormat::Plain => {
-                            // Could have already been serialized before being passed to this function.
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:?}", operation);
-                        },
-                        OutputFormat::JSON => {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                        },
-                        OutputFormat::PrettyJSON => {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                        },
-                        OutputFormat::Simple => {
-                            // Could have already been serialized before being passed to this function.
-                            println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
-                        },
-                        _ => {},
+            cmd_put(bucket, &object, path, part_size, client);
+            Ok(())
+        },
+        Commands::cp => {
+            let mut get: bool = true;
+            let mut path = matches.value_of("path").unwrap_or("").to_string();
+            if path.contains("s3://") {
+                get = false;
+                let (scheme, tmp_bucket) = matches.value_of("path").unwrap_or("s3:// ").split_at(5);
+
+                if tmp_bucket.contains("/") {
+                    let components: Vec<&str> = tmp_bucket.split('/').collect();
+                    let mut first: bool = true;
+                    let mut object_first: bool = true;
+
+                    for part in components {
+                        if first {
+                            bucket = part;
+                        } else {
+                            if !object_first {
+                                object += "/";
+                            }
+                            object_first = false;
+                            object += part;
+                            last = part;
+                        }
+                        first = false;
                     }
                 } else {
-                    let compute_hash: bool = false; // Change this to an option via the config
-                    let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
+                    bucket = tmp_bucket.trim();
+                    object = "".to_string();
                 }
-            } else {
-                if part_size < PART_SIZE_MIN {
-                    let result = put_object(bucket, &object, path, None, client);
-                } else {
-                    let compute_hash: bool = false; // Change this to an option via the config
-                    let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
-                }
+                path = matches.value_of("bucket").unwrap_or("").to_string();
             }
+
+            if get {
+                cmd_get(bucket, &object, &path, client);
+            } else {
+                let part_size: u64 = matches.value_of("size").unwrap_or("0").parse().unwrap_or(0);
+                cmd_put(bucket, &object, &path, part_size, client);                
+            }
+
             Ok(())
         },
         Commands::range => {
@@ -283,6 +268,87 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             Ok(())
         },
     };
+
+    Ok(())
+}
+
+fn cmd_get<P, D>(bucket: &str, object: &str, path: &str, client: &Client<P, D>) -> Result<(), S3Error>
+    where P: AwsCredentialsProvider,
+          D: DispatchSignedRequest,
+{
+    if client.is_time {
+        let mut operation: Operation;
+        operation = Operation::default();
+        let result = get_object(bucket, &object, &path, Some(&mut operation), client);
+        match client.output.format {
+            OutputFormat::Serialize => {
+                // Could have already been serialized before being passed to this function.
+                println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
+            },
+            OutputFormat::Plain => {
+                // Could have already been serialized before being passed to this function.
+                println_color_quiet!(client.is_quiet, client.output.color, "{:?}", operation);
+            },
+            OutputFormat::JSON => {
+                println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
+            },
+            OutputFormat::PrettyJSON => {
+                println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
+            },
+            OutputFormat::Simple => {
+                // Could have already been serialized before being passed to this function.
+                println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
+            },
+            _ => {},
+        }
+    } else {
+        let result = get_object(bucket, &object, &path, None, client);
+    }
+
+    Ok(())
+}
+fn cmd_put<P, D>(bucket: &str, object: &str, path: &str, part_size: u64, client: &Client<P, D>) -> Result<(), S3Error>
+    where P: AwsCredentialsProvider,
+          D: DispatchSignedRequest,
+{
+    if client.is_time {
+        let mut operation: Operation;
+        operation = Operation::default();
+        if part_size < PART_SIZE_MIN {
+            let result = put_object(bucket, &object, path, Some(&mut operation), client);
+            match client.output.format {
+                OutputFormat::Serialize => {
+                    // Could have already been serialized before being passed to this function.
+                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
+                },
+                OutputFormat::Plain => {
+                    // Could have already been serialized before being passed to this function.
+                    println_color_quiet!(client.is_quiet, client.output.color, "{:?}", operation);
+                },
+                OutputFormat::JSON => {
+                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
+                },
+                OutputFormat::PrettyJSON => {
+                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
+                },
+                OutputFormat::Simple => {
+                    // Could have already been serialized before being passed to this function.
+                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", operation);
+                },
+                _ => {},
+            }
+        } else {
+            let compute_hash: bool = false; // Change this to an option via the config
+            let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
+        }
+    } else {
+        if part_size < PART_SIZE_MIN {
+            let result = put_object(bucket, &object, path, None, client);
+        } else {
+            let compute_hash: bool = false; // Change this to an option via the config
+            let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
+        }
+    }
 
     Ok(())
 }
@@ -753,11 +819,8 @@ fn get_object_multipart_list<P, D>(bucket: &str, upload_id: &str, key: &str, cli
 }
 
 // Limited in file size.
-fn get_object<P, D>(bucket: &str,
-                    object: &str,
-                    path: &str,
-                    operation: Option<&mut Operation>,
-                    client: &Client<P, D>) -> Result<(), S3Error>
+fn get_object<P, D>(bucket: &str, object: &str, path: &str, operation: Option<&mut Operation>, client: &Client<P, D>)
+                    -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
@@ -769,10 +832,8 @@ fn get_object<P, D>(bucket: &str,
 }
 
 // Common portion of get_object... functions
-fn object_get<P, D>(request: &GetObjectRequest,
-                    path: &str,
-                    operation: Option<&mut Operation>,
-                    client: &Client<P, D>) -> Result<(), S3Error>
+fn object_get<P, D>(request: &GetObjectRequest, path: &str, operation: Option<&mut Operation>, client: &Client<P, D>)
+                    -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
@@ -825,13 +886,8 @@ fn object_get<P, D>(request: &GetObjectRequest,
     }
 }
 
-fn get_object_range<P, D>(bucket: &str,
-                          object: &str,
-                          offset: u64,
-                          len: u64,
-                          path: &str,
-                          operation: Option<&mut Operation>,
-                          client: &Client<P, D>)
+fn get_object_range<P, D>(bucket: &str, object: &str, offset: u64, len: u64, path: &str,
+                          operation: Option<&mut Operation>, client: &Client<P, D>)
                           -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
@@ -927,11 +983,8 @@ fn get_object_acl<P, D>(bucket: &str, object: &str, client: &Client<P, D>) -> Re
 }
 
 // Limited in file size. Max is 5GB but should use Multipart upload for larger than 15MB.
-fn put_object<P, D>(bucket: &str,
-                    key: &str,
-                    object: &str,
-                    operation: Option<&mut Operation>,
-                    client: &Client<P, D>) -> Result<(), S3Error>
+fn put_object<P, D>(bucket: &str, key: &str, object: &str, operation: Option<&mut Operation>, client: &Client<P, D>)
+                    -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
@@ -1196,11 +1249,9 @@ fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: 
     Ok(())
 }
 
-fn delete_object<P, D>(bucket: &str,
-                       object: &str,
-                       version: &str,
-                       operation: Option<&mut Operation>,
-                       client: &Client<P, D>) -> Result<(), S3Error>
+fn delete_object<P, D>(bucket: &str, object: &str, version: &str, operation: Option<&mut Operation>,
+                       client: &Client<P, D>)
+                       -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
