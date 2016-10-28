@@ -207,6 +207,8 @@ pub fn do_get_bench<'a>(bucket: &str,
                         base_object_name: &str,
                         duration: Duration,
                         iterations: u64,
+                        range: Option<&'a str>,
+                        endpoint: Endpoint,
                         operations: &'a mut Vec<Operation>) -> Result<(), S3Error>
 {
     let mut object: String;
@@ -220,23 +222,77 @@ pub fn do_get_bench<'a>(bucket: &str,
 
             let mut request = GetObjectRequest::default();
             request.bucket = bucket.to_string();
-            request.key = object;
+            request.key = object.clone();
+            if range.is_some() {
+                request.range = Some(range.unwrap().clone().to_string());
+            }
 
             let provider = DefaultCredentialsProviderSync::new(None).unwrap();
-            let endpoint = Endpoint::new(Region::UsEast1,
-                                         Signature::V2,
-                                         None,
-                                         None,
-                                         Some(format!("s3lsio - {}", "V2")));
+            let local_endpoint = endpoint.clone();
+            let s3client = S3Client::new(provider, local_endpoint);
 
-            let s3client = S3Client::new(provider, endpoint);
             match s3client.get_object(&request, Some(&mut operation)) {
                 Ok(output) => {},
                 Err(e) => {
-                    println!("Failed to get it...");
-                    //let error = format!("{:#?}", e);
-                    //println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                    //Err(S3Error::new(error))
+                    println_color_red!("Failed to get [{}/{}] - {}", bucket, object, e);
+                },
+            }
+
+            operations.push(operation);
+        }
+    } else if duration.as_secs() > 0 {
+        let mut count: u64 = 0;
+        let now = Instant::now();
+
+        loop {
+            let mut operation = Operation::default();
+            object = format!("{}{:04}", base_object_name, count+1);
+            //let result = get_object(bucket, &object, Some(&mut operation), client);
+            operations.push(operation);
+            if now.elapsed() >= duration {
+                break;
+            }
+            count += 1;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn do_put_bench<'a>(bucket: &str,
+                        base_object_name: &str,
+                        duration: Duration,
+                        iterations: u64,
+                        size: u64,
+                        endpoint: Endpoint,
+                        operations: &'a mut Vec<Operation>) -> Result<(), S3Error>
+{
+    let mut object: String;
+
+    if iterations > 0 {
+        for i in 0..iterations {
+            let mut operation = Operation::default();
+
+            // NB: For benchmarking, the objects are synthetic and in a predictable naming format.
+            object = format!("{}{:04}", base_object_name, i+1);
+
+            // Synthetic buffer creation to simulate an on disk object
+            let mut buffer: Vec<u8>;
+            zero_fill_buffer!(buffer, size);
+
+            let mut request = PutObjectRequest::default();
+            request.bucket = bucket.to_string();
+            request.key = object.clone();
+            request.body = Some(&buffer);
+
+            let provider = DefaultCredentialsProviderSync::new(None).unwrap();
+            let local_endpoint = endpoint.clone();
+            let s3client = S3Client::new(provider, local_endpoint);
+
+            match s3client.put_object(&request, Some(&mut operation)) {
+                Ok(output) => {},
+                Err(e) => {
+                    println_color_red!("Failed to put [{}/{}] - {}", bucket, object, e);
                 },
             }
 
@@ -385,13 +441,13 @@ fn put_object<P, D>(bucket: &str,
         zero_fill_buffer!(buffer, len);
     }
 
-    let correct_key: String;
-    if key.is_empty() {
+    let correct_key = if key.is_empty() {
         let path = Path::new(object);
-        correct_key = path.file_name().unwrap().to_str().unwrap().to_string();
+        path.file_name().unwrap().to_str().unwrap().to_string()
     } else {
-        correct_key = key.to_string();
-    }
+        key.to_string()
+    };
+
     let mut request = PutObjectRequest::default();
     request.bucket = bucket.to_string();
     request.key = correct_key;

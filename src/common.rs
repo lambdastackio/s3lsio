@@ -13,7 +13,7 @@
 // limitations under the License.
 
 
-pub fn bucket(cli_bucket: String) -> Option<String> {
+pub fn get_bucket(cli_bucket: String) -> Option<String> {
     let mut bucket: &str = "";
 
     if cli_bucket.contains('/') {

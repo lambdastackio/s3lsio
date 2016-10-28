@@ -87,7 +87,7 @@ use lsio::config::ConfigFile;
 use lsio::system::{ip, hostname};
 
 //use progress::ProgressBar;
-use common::bucket;
+use common::get_bucket;
 
 mod common;
 mod cli;
@@ -356,7 +356,8 @@ pub struct BenchRequest {
     pub iterations: u64,
     pub duration: u64,
     pub virtual_users: u32,
-    pub file_size: u64,
+    pub request_type: String,
+    pub size: u64,
     pub nodes: u32,
 }
 
@@ -535,6 +536,8 @@ fn main() {
                                  config.clone().proxy,
                                  Some(format!("s3lsio - {}", version)));
 
+    let endpoint_clone = endpoint.clone();
+
     let mut s3client = S3Client::new(provider, endpoint);
 
     let output = Output{format: output_format, color: output_color};
@@ -566,19 +569,45 @@ fn main() {
         if report.is_empty() {
             report = "d"; // Detail
         }
+        let report_desc = match report {
+            "s" | "S" => "Summary Report",
+            _ => "Detail Report",
+        };
 
         let res = match matches.subcommand() {
             ("get", Some(sub_matches)) => {
                 // This part would go into each host instance
-                let bench_host_instance_summary = host_controller(sub_matches, Commands::get, duration, nodes, iterations, virtual_users, 0);
+                let bench_request = BenchRequest{description: "Benchmarking GET requests...".to_string(),
+                                                 date_time: UTC::now().to_string(),
+                                                 report: report_desc.to_string(),
+                                                 iterations: iterations,
+                                                 duration: duration,
+                                                 virtual_users: virtual_users,
+                                                 request_type: "".to_string(),
+                                                 size: 0,
+                                                 nodes: nodes};
+                let bench_host_instance_summary = host_controller(sub_matches, Commands::get, duration, nodes, iterations, virtual_users, 0, endpoint_clone);
                 // It would then send the bench_host_instance_summary back to the master and process
-                master_benchmark("Benchmarking...", &UTC::now().to_string(), report, duration, nodes, iterations, virtual_users, 0, bench_output, bench_host_instance_summary);
+                if bench_host_instance_summary.is_some() {
+                    master_benchmark(bench_request, bench_output, bench_host_instance_summary.unwrap());
+                }
                 Ok(())
             },
             ("put", Some(sub_matches)) => {
                 let size: u64 = sub_matches.value_of("size").unwrap_or("4096").parse().unwrap_or(4096);
-                //let bench_host_instance_summary = host_benchmark(sub_matches, Commands::put, duration, nodes, iterations, virtual_users, size, &client);
-                //master_benchmark("Benchmarking...", &UTC::now().to_string(), duration, nodes, iterations, virtual_users, size, bench_output, bench_host_instance_summary);
+                let bench_request = BenchRequest{description: "Benchmarking PUT requests...".to_string(),
+                                                 date_time: UTC::now().to_string(),
+                                                 report: report_desc.to_string(),
+                                                 iterations: iterations,
+                                                 duration: duration,
+                                                 virtual_users: virtual_users,
+                                                 request_type: "".to_string(),
+                                                 size: size,
+                                                 nodes: nodes};
+                let bench_host_instance_summary = host_controller(sub_matches, Commands::put, duration, nodes, iterations, virtual_users, size, endpoint_clone);
+                if bench_host_instance_summary.is_some() {
+                    master_benchmark(bench_request, bench_output, bench_host_instance_summary.unwrap());
+                }
                 Ok(())
             },
             ("gen", Some(sub_matches)) => {
@@ -591,8 +620,19 @@ fn main() {
                 Ok(())
             }
             ("range", Some(sub_matches)) => {
-                //let bench_host_instance_summary = host_benchmark(sub_matches, Commands::range, duration, nodes, iterations, virtual_users, 0, &client);
-                //master_benchmark("Benchmarking...", &UTC::now().to_string(), duration, nodes, iterations, virtual_users, 0, bench_output, bench_host_instance_summary);
+                let bench_request = BenchRequest{description: "Benchmarking Byte-Range requests...".to_string(),
+                                                 date_time: UTC::now().to_string(),
+                                                 report: report_desc.to_string(),
+                                                 iterations: iterations,
+                                                 duration: duration,
+                                                 virtual_users: virtual_users,
+                                                 request_type: "".to_string(),
+                                                 size: 0,
+                                                 nodes: nodes};
+                let bench_host_instance_summary = host_controller(sub_matches, Commands::range, duration, nodes, iterations, virtual_users, 0, endpoint_clone);
+                if bench_host_instance_summary.is_some() {
+                    master_benchmark(bench_request, bench_output, bench_host_instance_summary.unwrap());
+                }
                 Ok(())
             },
             (e, _) => {
@@ -643,29 +683,9 @@ fn main() {
 }
 
 // NOTE: Will need to refactor this if there are more than one host...
-fn master_benchmark(description: &str,
-                    date_time: &str,
-                    report: &str,
-                    duration: u64,
-                    nodes: u32,
-                    iterations: u64,
-                    virtual_users: u32,
-                    len: u64,
+fn master_benchmark(bench_request: BenchRequest,
                     bench_output: BenchOutput,
                     bench_host_instance_summary: BenchHostInstanceSummary) {
-    let report_desc = match report {
-        "s" | "S" => "Summary Report",
-        _ => "Detail Report",
-    };
-
-    let bench_request = BenchRequest{description: description.to_string(),
-                                     date_time: date_time.to_string(),
-                                     report: report_desc.to_string(),
-                                     iterations: iterations,
-                                     duration: duration,
-                                     virtual_users: virtual_users,
-                                     file_size: len,
-                                     nodes: nodes};
     let mut bench_host_instance_operations: Vec<BenchHostInstanceSummary> = Vec::new();
     let mut bench_summary: BenchSummary;
 
@@ -683,13 +703,14 @@ fn host_controller(matches: &ArgMatches,
                    nodes: u32,
                    iterations: u64,
                    virtual_users: u32,
-                   len: u64) -> BenchHostInstanceSummary
+                   size: u64,
+                   endpoint: Endpoint) -> Option<BenchHostInstanceSummary>
 {
     // Broken out like this since we may want to have a true controller to cause all threads to
     // wait until given the go ahead which will create a thundering heard or create a ramp up
     // controller to be more real world like.
 
-    host_benchmark(matches, Commands::get, duration, nodes, iterations, virtual_users, len)
+    host_benchmark(matches, method, duration, nodes, iterations, virtual_users, size, endpoint)
 }
 
 /*
@@ -698,13 +719,14 @@ fn host_controller_trigger(tx: Sender<i32>, millis: u64) {
 */
 
 // Runs in the host_controller thread
-fn host_benchmark<'a>(matches: &'a ArgMatches,
+fn host_benchmark(matches: &ArgMatches,
                   method: Commands,
                   duration: u64,
                   nodes: u32,
                   iterations: u64,
                   virtual_users: u32,
-                  len: u64) -> BenchHostInstanceSummary
+                  size: u64,
+                  endpoint: Endpoint) -> Option<BenchHostInstanceSummary>
 {
     let duration2 = Duration::from_secs(duration);
     let bench_thread_operations: Vec<BenchThreadSummary> = Vec::new();
@@ -719,31 +741,57 @@ fn host_benchmark<'a>(matches: &'a ArgMatches,
     let arc_end_times = Arc::new(Mutex::new(thread_ops_end_times));
 
     let (scheme, tmp_bucket) = matches.value_of("bucket").unwrap_or("s3:// ").split_at(5);
-    let bucket = bucket(tmp_bucket.to_string()).unwrap_or("".to_string());
+    let mut bucket = get_bucket(tmp_bucket.to_string()).unwrap_or("".to_string());
+
+    if bucket.is_empty() {
+        let (scheme, tmp_bucket) = matches.value_of("path").unwrap_or("s3:// ").split_at(5);
+        bucket = get_bucket(tmp_bucket.to_string()).unwrap_or("".to_string());
+        if bucket.is_empty() {
+            println_color_red!("Bucket is empty. Make sure to follow CLI. Issue s3lsio -h for how-to");
+            return None;
+        }
+    }
+
+    // These are only for Byte-Range requests
+    let mut offset: u64 = 0;
+    let mut len: u64 = 0;
+
+    if method == Commands::range {
+        offset = matches.value_of("offset").unwrap_or("0").parse().unwrap_or(0);
+        len = matches.value_of("len").unwrap_or("0").parse().unwrap_or(0);
+        if len == 0 {
+            println_color_red!("Error: Range Len is 0");
+            return None;
+        }
+    }
 
     for i in 0..virtual_users {
         let t_arc = arc.clone();
         let t_arc_start_times = arc_start_times.clone();
         let t_arc_end_times = arc_end_times.clone();
         let t_bucket = bucket.clone();
+        let t_endpoint = endpoint.clone();
 
-        // Spawn the threads within the current scope
+        // Spawn the threads which represent virtual users
         let handle = thread::spawn(move || {
             let mut operations: Vec<Operation> = Vec::new();
             let thread_name = format!("thread_{:04}", i+1);
             let base_object_name = format!("{}/file{:04}", thread_name, i+1);
             // NB: Each thread has it's own virtual directory in S3 for the given bucket.
 
-            //let result = bench::commands(matches, method, duration2, iterations, virtual_users, len, &base_object_name, &mut operations, &client);
-
-            //match method {
-                //Commands::get => {
-                    // Make sure the s3 schema prefix is present
-                    let result = bench::do_get_bench(&t_bucket, &base_object_name, duration2, iterations, &mut operations);
-                //},
-                //Commands::put => {},
-                //_ => {},
-            //}
+            match method {
+                Commands::get => {
+                    let result = bench::do_get_bench(&t_bucket, &base_object_name, duration2, iterations, None, t_endpoint, &mut operations);
+                },
+                Commands::put => {
+                    let result = bench::do_put_bench(&t_bucket, &base_object_name, duration2, iterations, size, t_endpoint, &mut operations);
+                },
+                Commands::range => {
+                    let range = format!("bytes={}-{}", offset, len);
+                    let result = bench::do_get_bench(&t_bucket, &base_object_name, duration2, iterations, Some(&range), t_endpoint, &mut operations);
+                },
+                _ => {},
+            }
 
             // start - The earliest operation of the given thread
             // end - The latest operation of the given thread
@@ -824,126 +872,8 @@ fn host_benchmark<'a>(matches: &'a ArgMatches,
     // Pass the bench_host_instance_summary of each host back to the master/primary
     // and add them to bench_host_instance_operations
 
-    bench_host_instance_summary
+    Some(bench_host_instance_summary)
 }
-
-/*
-fn host_benchmark<P, D>(matches: &ArgMatches,
-                        method: Commands,
-                        duration: u64,
-                        nodes: u32,
-                        iterations: u64,
-                        virtual_users: u32,
-                        len: u64,
-                        client: &Client<P, D>) -> BenchHostInstanceSummary
-    where P: AwsCredentialsProvider + Sync + Send,
-          D: DispatchSignedRequest + Sync + Send,
-{
-    let duration2 = Duration::from_secs(duration);
-    let bench_thread_operations: Vec<BenchThreadSummary> = Vec::new();
-    let mut bench_host_instance_summary: BenchHostInstanceSummary;
-    let thread_ops_start_times: Vec<DateTime<UTC>> = Vec::new();
-    let thread_ops_end_times: Vec<DateTime<UTC>> = Vec::new();
-
-    let arc = Arc::new(Mutex::new(bench_thread_operations));
-    let arc_start_times = Arc::new(Mutex::new(thread_ops_start_times));
-    let arc_end_times = Arc::new(Mutex::new(thread_ops_end_times));
-
-    for i in 0..virtual_users {
-        let t_arc = arc.clone();
-        let t_arc_start_times = arc_start_times.clone();
-        let t_arc_end_times = arc_end_times.clone();
-
-        // Spawn the threads within the current scope
-        crossbeam::scope(|scope| {
-            scope.spawn(move || {
-                let mut operations: Vec<Operation> = Vec::new();
-                let thread_name = format!("thread_{:04}", i+1);
-                let base_object_name: String;
-                // NB: Each thread has it's own virtual directory in S3 for the given bucket.
-                if method == Commands::put {
-                    base_object_name = format!("{}/file{:04}", thread_name, i+1);
-                } else {
-                    base_object_name = format!("{}/file", thread_name);
-                }
-
-                let result = bench::commands(matches, method, &duration2, iterations, virtual_users, len, &base_object_name, &mut operations, &client);
-                // start - The earliest operation of the given thread
-                // end - The latest operation of the given thread
-                let (bench_thread, bench_operations, start, end) = bench_thread_results(&operations);
-
-                let mut bench_thread_summary = BenchThreadSummary::new(bench_thread, bench_operations);
-                bench_thread_summary.thread_name = thread_name.clone();
-
-                let mut bto = t_arc.lock().unwrap();
-                bto.push(bench_thread_summary);
-
-                let mut start_times = t_arc_start_times.lock().unwrap();
-                let mut end_times = t_arc_end_times.lock().unwrap();
-                start_times.push(start);
-                end_times.push(end);
-            });
-        });
-    }
-
-    // NOTE: Get the data from Mutex and clone it to create a "new" ownership that can be added
-    // to the collections below...
-    let bto_mutex = arc.lock().unwrap();
-    let mut bto: Vec<BenchThreadSummary> = Vec::new();
-
-    for b in bto_mutex.iter() {
-        let nb = b.clone();
-        bto.push(nb.clone());
-    }
-
-    bench_host_instance_summary = BenchHostInstanceSummary::new(bto);
-    bench_host_instance_summary.host_instance = hostname().unwrap_or("".to_string());
-    bench_host_instance_summary.ip_address = ip("").unwrap().to_string();
-
-    let start_time_mutex = arc_start_times.lock().unwrap();
-    let mut start_time: DateTime<UTC> = UTC::now();
-
-    for s in start_time_mutex.iter() {
-        let st = s.clone();
-        if st <= start_time {
-            start_time = st;
-        }
-    }
-
-    let end_time_mutex = arc_end_times.lock().unwrap();
-    let mut end_time: DateTime<UTC> = UTC::now();
-
-    for e in end_time_mutex.iter() {
-        let et = e.clone();
-        if et >= end_time {
-            end_time = et;
-        }
-    }
-
-    bench_host_instance_summary.start_time = start_time.to_string();
-    bench_host_instance_summary.end_time = end_time.to_string();
-
-    let total_duration: Duration = (end_time - start_time).to_std().unwrap();
-    let duration_str: String = format!("{}.{}", total_duration.as_secs(), total_duration.subsec_nanos());
-    let duration: f64 =  duration_str.parse::<f64>().unwrap() as f64;
-
-    bench_host_instance_summary.host_duration = duration;
-
-    // Get the earliest start_time and latest end_time of all of the threads for the given host.
-    // This is used to determine true throughput for host. This data will then go to a collector
-    // that runs the stats for all hosts before presenting final results.
-
-    // NB: Only one host for now...
-
-    // Get host results (vec of the thread results)
-    bench_host_instance_results(&mut bench_host_instance_summary);
-
-    // Pass the bench_host_instance_summary of each host back to the master/primary
-    // and add them to bench_host_instance_operations
-
-    bench_host_instance_summary
-}
-*/
 
 // Use this function if you want to generate a number of actual files of a given size with a given
 // prefix (i.e. 'file').
@@ -1036,7 +966,7 @@ fn bench_thread_results(operations: &[Operation]) -> (BenchThread, Vec<BenchOper
     bench_thread_summary.total_errors = total_errors;
     bench_thread_summary.total_payload = total_payload;
     bench_thread_summary.total_success = bench_thread_summary.total_requests - bench_thread_summary.total_errors;
-    bench_thread_summary.total_throughput = (bench_thread_summary.total_requests as f64 / duration) as f64;
+    bench_thread_summary.total_throughput = (bench_thread_summary.total_success as f64 / duration) as f64;
 
     (bench_thread_summary, bench_operations, start, end)
 }
@@ -1069,7 +999,7 @@ fn bench_host_instance_results(bench_host_instance_summary: &mut BenchHostInstan
     bench_host_instance_summary.total_threads = total_threads;
     bench_host_instance_summary.total_success = total_success;
     bench_host_instance_summary.total_requests = total_requests;
-    bench_host_instance_summary.total_throughput = (total_requests as f64 / total_duration) as f64;
+    bench_host_instance_summary.total_throughput = (total_success as f64 / total_duration) as f64;
 }
 
 // Rolls up the hosts for a summary... For now there is only one hosts...
@@ -1118,7 +1048,8 @@ fn bench_results(metadata: BenchRequest,
     bench_summary.total_host_instances = total_host_instances;
     bench_summary.total_success = total_success;
     bench_summary.total_requests = total_requests;
-    bench_summary.total_throughput = (total_requests as f64 / duration) as f64;
+    // Only successful requests are used in throughput
+    bench_summary.total_throughput = (total_success as f64 / duration) as f64;
 
     // NB: *If the report type contains summary then make bench_summary.operations = None
     if metadata.report.contains("Summary") {
