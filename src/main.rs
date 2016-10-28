@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![feature(plugin)]
+#![plugin(clippy)]
+#![allow(print_with_newline)]
+#![allow(or_fun_call)]
+
 //#![allow(unused_imports)]
 #![allow(unused_variables)]
 
@@ -50,8 +55,8 @@ extern crate clap;
 extern crate pbr;
 extern crate toml;
 extern crate md5;
-extern crate crossbeam;
 extern crate time;
+extern crate chrono;
 
 use std::io;
 use std::env;
@@ -61,10 +66,14 @@ use std::fs::File;
 use std::convert::AsRef;
 use std::time::Duration;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
 
 use clap::{Shell, ArgMatches};
 use url::Url;
 use rustc_serialize::json;
+use chrono::{UTC, DateTime};
 
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::s3::endpoint::*;
@@ -74,11 +83,11 @@ use aws_sdk_rust::aws::common::region::Region;
 use aws_sdk_rust::aws::common::credentials::{AwsCredentialsProvider, DefaultCredentialsProviderSync};
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 
-use common::progress::ProgressBar;
 use lsio::config::ConfigFile;
 use lsio::system::{ip, hostname};
 
-use time::now_utc;
+//use progress::ProgressBar;
+use common::bucket;
 
 mod common;
 mod cli;
@@ -170,6 +179,8 @@ pub struct BenchOutput {
 pub struct BenchOperation {
     /// Time operation occured
     //pub time: String,
+    pub start_time: String,
+    pub end_time: String,
     /// Request (endpoint + path)
     pub request: String,
     /// Endpoint URL
@@ -190,12 +201,12 @@ pub struct BenchOperation {
 
 /// A summary of all of the operations for a given thread
 ///
-/// start and and end time DO NOT reflect a true duration. The total_duration does that.
+/// start and and end time DO NOT reflect a true duration. ```The total_duration``` does that.
 ///
 #[derive(Debug, Clone, RustcEncodable)]
 pub struct BenchThreadSummary {
     // Thread ID/Name
-    pub thread_group: String,
+    pub thread_name: String,
     //pub start_time: String,
     // Time the overall benchmarking ended on a given host/instance
     //pub end_time: String,
@@ -211,7 +222,7 @@ pub struct BenchThreadSummary {
 impl BenchThreadSummary {
     pub fn new(thread: BenchThread, operations: Vec<BenchOperation>) -> BenchThreadSummary {
         BenchThreadSummary {
-            thread_group: thread.thread_group.clone(),
+            thread_name: thread.thread_name.clone(),
             //start_time: thread.start_time.clone(),
             //end_time: thread.end_time.clone(),
             total_requests: thread.total_requests,
@@ -230,7 +241,7 @@ impl BenchThreadSummary {
 #[derive(Debug, Default, Clone)]
 pub struct BenchThread {
     // Thread ID/Name
-    pub thread_group: String,
+    pub thread_name: String,
     //pub start_time: String,
     // Time the overall benchmarking ended on a given host/instance
     //pub end_time: String,
@@ -246,19 +257,19 @@ pub struct BenchThread {
 ///
 /// NOTE: The start and end times DO NOT reflect a true duration. They represent the overall time
 /// block to execute the operations and compute the results for the given node/instance.
-/// Total_duration is the number of seconds.nanoseconds of actual execution time.
+/// ```Total_duration``` is the number of seconds.nanoseconds of actual execution time.
 ///
 /// NOTE: Simple types are used here to make serialization easy.
-/// start and and end time DO NOT reflect a true duration. The total_duration does that.
+/// start and and end time DO NOT reflect a true duration. The ```total_duration``` does that.
 ///
 #[derive(Debug, Clone, RustcEncodable)]
 pub struct BenchHostInstanceSummary {
     pub host_instance: String,
     pub ip_address: String,
     // Time the benchmarking started on a given host/instance
-    //pub start_time: String,
+    pub start_time: String,
     // Time the overall benchmarking ended on a given host/instance
-    //pub end_time: String,
+    pub end_time: String,
     pub total_requests: u64,  //Total requests from the sum of the total BenchThreadSummaries
     pub total_success: u64,
     pub total_errors: u64,
@@ -266,6 +277,7 @@ pub struct BenchHostInstanceSummary {
     pub total_payload: u64,
     pub total_throughput: f64,
     pub total_threads: u64,
+    pub host_duration:f64,
     // Collect metadata of node/vm such as ohai data
     //pub host_instance_metadata: String,
     pub operations: Vec<BenchThreadSummary>
@@ -276,8 +288,8 @@ impl BenchHostInstanceSummary {
         BenchHostInstanceSummary {
             host_instance: "".to_string(),
             ip_address: "".to_string(),
-            //start_time: "".to_string(),
-            //end_time: "".to_string(),
+            start_time: "".to_string(),
+            end_time: "".to_string(),
             total_requests: 0,
             total_success: 0,
             total_errors: 0,
@@ -285,6 +297,7 @@ impl BenchHostInstanceSummary {
             total_payload: 0,
             total_throughput: 0.0,
             total_threads: 0,
+            host_duration: 0.0,
             operations: operations,
         }
     }
@@ -292,13 +305,14 @@ impl BenchHostInstanceSummary {
 
 /// A summary of all of the hosts used in the benchmarking process.
 ///
-/// start and and end time DO NOT reflect a true duration. The total_duration does that.
+/// start and and end time DO NOT reflect a true duration. The ```total_duration``` does that.
 ///
 #[derive(Debug, Clone, RustcEncodable)]
 pub struct BenchSummary {
-    //pub start_time: String,
+    // Earliest time benchmarking started on a given host/instance
+    pub start_time: String,
     // Time the overall benchmarking ended on a given host/instance
-    //pub end_time: String,
+    pub end_time: String,
     pub total_requests: u64,   // Total requests from all of the nodes/instances
     pub total_success: u64,
     pub total_errors: u64,
@@ -307,14 +321,14 @@ pub struct BenchSummary {
     pub total_host_instances: u64,
     pub total_threads: u64,    // Total threads that were part of the benchmarking
     pub total_throughput: f64,
-    pub operations: Vec<BenchHostInstanceSummary>,
+    pub operations: Option<Vec<BenchHostInstanceSummary>>,
 }
 
 impl BenchSummary {
     pub fn new(operations: Vec<BenchHostInstanceSummary>) -> BenchSummary {
         BenchSummary {
-            //start_time: "".to_string(),
-            //end_time: "".to_string(),
+            start_time: "".to_string(),
+            end_time: "".to_string(),
             total_requests: 0,
             total_success: 0,
             total_errors: 0,
@@ -323,7 +337,7 @@ impl BenchSummary {
             total_host_instances: 0,
             total_threads: 0,
             total_throughput: 0.0,
-            operations: operations,
+            operations: Some(operations),
         }
     }
 }
@@ -332,12 +346,13 @@ impl BenchSummary {
 ///
 /// iterations - how many iterations to perform. This should be 0 if duration is not 0
 /// duration - how many seconds to perform operations. This should be 0 if iterations is not 0
-/// virtual_users - how many simulated users (threads to perform)
+/// ```virtual_users``` - how many simulated users (threads to perform)
 /// nodes - how many hosts/VMs to run these operations on
 #[derive(Debug, Clone, RustcEncodable)]
 pub struct BenchRequest {
     pub date_time: String,
     pub description: String,
+    pub report: String,
     pub iterations: u64,
     pub duration: u64,
     pub virtual_users: u32,
@@ -363,11 +378,11 @@ impl BenchResults {
     }
 }
 
-/// Client structure holds a reference to the S3Client which also implements two traits:
-/// AwsCredentialsProvider and DispatchSignedRequest
-/// Since S3Client struct is takes those two traits as parameters then ALL functions called
-/// that require passing in S3Client or Client must specify the trait signature as follows:
-/// Example: fn whatever_function<P: AwsCredentialsProvider, D: DispatchSignedRequest>(client: &mut Client<P,D>)
+/// Client structure holds a reference to the ```S3Client``` which also implements two traits:
+/// ```AwsCredentialsProvider``` and ```DispatchSignedRequest```
+/// Since ```S3Client``` struct is takes those two traits as parameters then ALL functions called
+/// that require passing in ```S3Client``` or Client must specify the trait signature as follows:
+/// Example: fn ```whatever_function```<P: ```AwsCredentialsProvider```, D: ```DispatchSignedRequest```>(client: &mut Client<P,D>)
 /// Note: Could also specify 'where' P:... D:... instead.
 ///
 pub struct Client<'a, P: 'a, D: 'a>
@@ -427,7 +442,6 @@ fn main() {
     // does not support a home directory.
     let config_option = matches.value_of("config").unwrap();
     let region = match matches.value_of("region").unwrap().to_string().to_lowercase().as_ref() {
-        "useast1" => Region::UsEast1,
         "uswest1" => Region::UsWest1,
         "uswest2" => Region::UsWest2,
         "cnnorth1" => Region::CnNorth1,
@@ -460,7 +474,6 @@ fn main() {
         "json" => OutputFormat::JSON,
         "none" => OutputFormat::None,
         "noneall" => OutputFormat::NoneAll,
-        "pretty-json" => OutputFormat::PrettyJSON,
         "plain" => OutputFormat::Plain,
         "serialize" => OutputFormat::Serialize,
         "simple" => OutputFormat::Simple,
@@ -470,14 +483,12 @@ fn main() {
     let output_bench_format = match matches.value_of("output-bench-format").unwrap().to_string().to_lowercase().as_ref() {
         "csv" => OutputFormat::CSV,
         "json" => OutputFormat::JSON,
-        "pretty-json" => OutputFormat::PrettyJSON,
         "plain" => OutputFormat::Plain,
         "serialize" => OutputFormat::Serialize,
         _ => OutputFormat::PrettyJSON,
     };
 
     let output_color = match matches.value_of("output-color").unwrap().to_string().to_lowercase().as_ref() {
-        "green" => term::color::GREEN,
         "red" => term::color::RED,
         "blue" => term::color::BLUE,
         "yellow" => term::color::YELLOW,
@@ -550,18 +561,24 @@ fn main() {
         let duration: u64 = options[0].parse().unwrap_or(0);
         let iterations: u64 = options[1].parse().unwrap_or(0);
         let virtual_users: u32 = options[2].parse().unwrap_or(0);
-        // NB: Shards can be calculated but passed in for...
-        let shards: u16 = options[3].parse().unwrap_or(1);
-        let nodes: u32 = options[4].parse().unwrap_or(1);
+        let nodes: u32 = options[3].parse().unwrap_or(1);
+        let mut report: &str = options[4];
+        if report.is_empty() {
+            report = "d"; // Detail
+        }
 
         let res = match matches.subcommand() {
             ("get", Some(sub_matches)) => {
-                benchmark(sub_matches, Commands::get, duration, bench_output, nodes, iterations, virtual_users, 0, shards, &client);
+                // This part would go into each host instance
+                let bench_host_instance_summary = host_controller(sub_matches, Commands::get, duration, nodes, iterations, virtual_users, 0);
+                // It would then send the bench_host_instance_summary back to the master and process
+                master_benchmark("Benchmarking...", &UTC::now().to_string(), report, duration, nodes, iterations, virtual_users, 0, bench_output, bench_host_instance_summary);
                 Ok(())
             },
             ("put", Some(sub_matches)) => {
                 let size: u64 = sub_matches.value_of("size").unwrap_or("4096").parse().unwrap_or(4096);
-                benchmark(sub_matches, Commands::put, duration, bench_output, nodes, iterations, virtual_users, size, shards, &client);
+                //let bench_host_instance_summary = host_benchmark(sub_matches, Commands::put, duration, nodes, iterations, virtual_users, size, &client);
+                //master_benchmark("Benchmarking...", &UTC::now().to_string(), duration, nodes, iterations, virtual_users, size, bench_output, bench_host_instance_summary);
                 Ok(())
             },
             ("gen", Some(sub_matches)) => {
@@ -573,9 +590,11 @@ fn main() {
                 let gen_result = gen_files(bench_tmp_dir, "file", iterations, size);
                 Ok(())
             }
-            /*
-            ("range", Some(sub_matches)) => bench::commands(sub_matches, Commands::range, duration, iterations, virtual_users, &mut operations, &mut client),
-            */
+            ("range", Some(sub_matches)) => {
+                //let bench_host_instance_summary = host_benchmark(sub_matches, Commands::range, duration, nodes, iterations, virtual_users, 0, &client);
+                //master_benchmark("Benchmarking...", &UTC::now().to_string(), duration, nodes, iterations, virtual_users, 0, bench_output, bench_host_instance_summary);
+                Ok(())
+            },
             (e, _) => {
                 println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
                 Err(S3Error::new("A valid benchmarking instruction is required"))
@@ -623,57 +642,246 @@ fn main() {
     }
 }
 
-// Uses crossbeam which allows for stack frame encapsulation.
-fn benchmark<P, D>(matches: &ArgMatches,
-               method: Commands,
-               duration: u64,
-               bench_output: BenchOutput,
-               nodes: u32,
-               iterations: u64,
-               virtual_users: u32,
-               len: u64,
-               shards: u16,
-               client: &Client<P, D>) -> ()
-    where P: AwsCredentialsProvider + Sync + Send,
-          D: DispatchSignedRequest + Sync + Send,
-{
-    let duration2 = Duration::from_secs(duration);
-    let bench_request = BenchRequest{description: "Benchmarking...".to_string(),
-                                     date_time: now_utc().rfc822().to_string(),
+// NOTE: Will need to refactor this if there are more than one host...
+fn master_benchmark(description: &str,
+                    date_time: &str,
+                    report: &str,
+                    duration: u64,
+                    nodes: u32,
+                    iterations: u64,
+                    virtual_users: u32,
+                    len: u64,
+                    bench_output: BenchOutput,
+                    bench_host_instance_summary: BenchHostInstanceSummary) {
+    let report_desc = match report {
+        "s" | "S" => "Summary Report",
+        _ => "Detail Report",
+    };
+
+    let bench_request = BenchRequest{description: description.to_string(),
+                                     date_time: date_time.to_string(),
+                                     report: report_desc.to_string(),
                                      iterations: iterations,
                                      duration: duration,
                                      virtual_users: virtual_users,
                                      file_size: len,
                                      nodes: nodes};
-    let bench_thread_operations: Vec<BenchThreadSummary> = Vec::new();
-    let mut bench_host_instance_summary: BenchHostInstanceSummary;
     let mut bench_host_instance_operations: Vec<BenchHostInstanceSummary> = Vec::new();
     let mut bench_summary: BenchSummary;
 
+    // This should be called for each host
+    bench_host_instance_operations.push(bench_host_instance_summary);
+    bench_summary = BenchSummary::new(bench_host_instance_operations);
+
+    // Get results (vec of the hosts results)
+    bench_results(bench_request, &mut bench_summary, bench_output);
+}
+
+fn host_controller(matches: &ArgMatches,
+                   method: Commands,
+                   duration: u64,
+                   nodes: u32,
+                   iterations: u64,
+                   virtual_users: u32,
+                   len: u64) -> BenchHostInstanceSummary
+{
+    // Broken out like this since we may want to have a true controller to cause all threads to
+    // wait until given the go ahead which will create a thundering heard or create a ramp up
+    // controller to be more real world like.
+
+    host_benchmark(matches, Commands::get, duration, nodes, iterations, virtual_users, len)
+}
+
+/*
+fn host_controller_trigger(tx: Sender<i32>, millis: u64) {
+}
+*/
+
+// Runs in the host_controller thread
+fn host_benchmark<'a>(matches: &'a ArgMatches,
+                  method: Commands,
+                  duration: u64,
+                  nodes: u32,
+                  iterations: u64,
+                  virtual_users: u32,
+                  len: u64) -> BenchHostInstanceSummary
+{
+    let duration2 = Duration::from_secs(duration);
+    let bench_thread_operations: Vec<BenchThreadSummary> = Vec::new();
+    let mut bench_host_instance_summary: BenchHostInstanceSummary;
+    let thread_ops_start_times: Vec<DateTime<UTC>> = Vec::new();
+    let thread_ops_end_times: Vec<DateTime<UTC>> = Vec::new();
+
+    let mut handles: Vec<_> = Vec::new();
+
     let arc = Arc::new(Mutex::new(bench_thread_operations));
+    let arc_start_times = Arc::new(Mutex::new(thread_ops_start_times));
+    let arc_end_times = Arc::new(Mutex::new(thread_ops_end_times));
+
+    let (scheme, tmp_bucket) = matches.value_of("bucket").unwrap_or("s3:// ").split_at(5);
+    let bucket = bucket(tmp_bucket.to_string()).unwrap_or("".to_string());
 
     for i in 0..virtual_users {
         let t_arc = arc.clone();
+        let t_arc_start_times = arc_start_times.clone();
+        let t_arc_end_times = arc_end_times.clone();
+        let t_bucket = bucket.clone();
+
+        // Spawn the threads within the current scope
+        let handle = thread::spawn(move || {
+            let mut operations: Vec<Operation> = Vec::new();
+            let thread_name = format!("thread_{:04}", i+1);
+            let base_object_name = format!("{}/file{:04}", thread_name, i+1);
+            // NB: Each thread has it's own virtual directory in S3 for the given bucket.
+
+            //let result = bench::commands(matches, method, duration2, iterations, virtual_users, len, &base_object_name, &mut operations, &client);
+
+            //match method {
+                //Commands::get => {
+                    // Make sure the s3 schema prefix is present
+                    let result = bench::do_get_bench(&t_bucket, &base_object_name, duration2, iterations, &mut operations);
+                //},
+                //Commands::put => {},
+                //_ => {},
+            //}
+
+            // start - The earliest operation of the given thread
+            // end - The latest operation of the given thread
+            let (bench_thread, bench_operations, start, end) = bench_thread_results(&operations);
+
+            let mut bench_thread_summary = BenchThreadSummary::new(bench_thread, bench_operations);
+            bench_thread_summary.thread_name = thread_name.clone();
+
+            let mut bto = t_arc.lock().unwrap();
+            bto.push(bench_thread_summary);
+
+            let mut start_times = t_arc_start_times.lock().unwrap();
+            let mut end_times = t_arc_end_times.lock().unwrap();
+            start_times.push(start);
+            end_times.push(end);
+        });
+
+        handles.push(handle);
+    }
+
+    // Wait on above threads to complete before going on...
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    // NOTE: Get the data from Mutex and clone it to create a "new" ownership that can be added
+    // to the collections below...
+    let bto_mutex = arc.lock().unwrap();
+    let mut bto: Vec<BenchThreadSummary> = Vec::new();
+
+    for b in bto_mutex.iter() {
+        let nb = b.clone();
+        bto.push(nb.clone());
+    }
+
+    bench_host_instance_summary = BenchHostInstanceSummary::new(bto);
+    bench_host_instance_summary.host_instance = hostname().unwrap_or("".to_string());
+    bench_host_instance_summary.ip_address = ip("").unwrap().to_string();
+
+    let start_time_mutex = arc_start_times.lock().unwrap();
+    let mut start_time: DateTime<UTC> = UTC::now();
+
+    for s in start_time_mutex.iter() {
+        let st = *s; //s.clone();
+        if st <= start_time {
+            start_time = st;
+        }
+    }
+
+    let end_time_mutex = arc_end_times.lock().unwrap();
+    let mut end_time: DateTime<UTC> = UTC::now();
+
+    for e in end_time_mutex.iter() {
+        let et = *e; //e.clone();
+        if et >= end_time {
+            end_time = et;
+        }
+    }
+
+    bench_host_instance_summary.start_time = start_time.format("%Y-%m-%d %H:%M:%S%.9f %z").to_string();
+    bench_host_instance_summary.end_time = end_time.format("%Y-%m-%d %H:%M:%S%.9f %z").to_string();
+
+    let total_duration: Duration = (end_time - start_time).to_std().unwrap();
+    let duration_str: String = format!("{}.{}", total_duration.as_secs(), total_duration.subsec_nanos());
+    let duration: f64 =  duration_str.parse::<f64>().unwrap() as f64;
+
+    bench_host_instance_summary.host_duration = duration;
+
+    // Get the earliest start_time and latest end_time of all of the threads for the given host.
+    // This is used to determine true throughput for host. This data will then go to a collector
+    // that runs the stats for all hosts before presenting final results.
+
+    // NB: Only one host for now...
+
+    // Get host results (vec of the thread results)
+    bench_host_instance_results(&mut bench_host_instance_summary);
+
+    // Pass the bench_host_instance_summary of each host back to the master/primary
+    // and add them to bench_host_instance_operations
+
+    bench_host_instance_summary
+}
+
+/*
+fn host_benchmark<P, D>(matches: &ArgMatches,
+                        method: Commands,
+                        duration: u64,
+                        nodes: u32,
+                        iterations: u64,
+                        virtual_users: u32,
+                        len: u64,
+                        client: &Client<P, D>) -> BenchHostInstanceSummary
+    where P: AwsCredentialsProvider + Sync + Send,
+          D: DispatchSignedRequest + Sync + Send,
+{
+    let duration2 = Duration::from_secs(duration);
+    let bench_thread_operations: Vec<BenchThreadSummary> = Vec::new();
+    let mut bench_host_instance_summary: BenchHostInstanceSummary;
+    let thread_ops_start_times: Vec<DateTime<UTC>> = Vec::new();
+    let thread_ops_end_times: Vec<DateTime<UTC>> = Vec::new();
+
+    let arc = Arc::new(Mutex::new(bench_thread_operations));
+    let arc_start_times = Arc::new(Mutex::new(thread_ops_start_times));
+    let arc_end_times = Arc::new(Mutex::new(thread_ops_end_times));
+
+    for i in 0..virtual_users {
+        let t_arc = arc.clone();
+        let t_arc_start_times = arc_start_times.clone();
+        let t_arc_end_times = arc_end_times.clone();
+
         // Spawn the threads within the current scope
         crossbeam::scope(|scope| {
             scope.spawn(move || {
                 let mut operations: Vec<Operation> = Vec::new();
-                //let mut shard_start: u16 = 0;
-                //let mut shard_stop: u16 = 0;
-                let file: String;
+                let thread_name = format!("thread_{:04}", i+1);
+                let base_object_name: String;
+                // NB: Each thread has it's own virtual directory in S3 for the given bucket.
                 if method == Commands::put {
-                    file = format!("file{:04}", i+1);
+                    base_object_name = format!("{}/file{:04}", thread_name, i+1);
                 } else {
-                    file = "file".to_string();
+                    base_object_name = format!("{}/file", thread_name);
                 }
-                let result = bench::commands(matches, method, &duration2, iterations, virtual_users, len, &file, &mut operations, &client);
-                let (bench_thread, bench_operations) = bench_thread_results(&operations);
+
+                let result = bench::commands(matches, method, &duration2, iterations, virtual_users, len, &base_object_name, &mut operations, &client);
+                // start - The earliest operation of the given thread
+                // end - The latest operation of the given thread
+                let (bench_thread, bench_operations, start, end) = bench_thread_results(&operations);
 
                 let mut bench_thread_summary = BenchThreadSummary::new(bench_thread, bench_operations);
-                bench_thread_summary.thread_group = format!("thread_{:03}", i+1);
+                bench_thread_summary.thread_name = thread_name.clone();
 
                 let mut bto = t_arc.lock().unwrap();
                 bto.push(bench_thread_summary);
+
+                let mut start_times = t_arc_start_times.lock().unwrap();
+                let mut end_times = t_arc_end_times.lock().unwrap();
+                start_times.push(start);
+                end_times.push(end);
             });
         });
     }
@@ -692,19 +900,50 @@ fn benchmark<P, D>(matches: &ArgMatches,
     bench_host_instance_summary.host_instance = hostname().unwrap_or("".to_string());
     bench_host_instance_summary.ip_address = ip("").unwrap().to_string();
 
+    let start_time_mutex = arc_start_times.lock().unwrap();
+    let mut start_time: DateTime<UTC> = UTC::now();
+
+    for s in start_time_mutex.iter() {
+        let st = s.clone();
+        if st <= start_time {
+            start_time = st;
+        }
+    }
+
+    let end_time_mutex = arc_end_times.lock().unwrap();
+    let mut end_time: DateTime<UTC> = UTC::now();
+
+    for e in end_time_mutex.iter() {
+        let et = e.clone();
+        if et >= end_time {
+            end_time = et;
+        }
+    }
+
+    bench_host_instance_summary.start_time = start_time.to_string();
+    bench_host_instance_summary.end_time = end_time.to_string();
+
+    let total_duration: Duration = (end_time - start_time).to_std().unwrap();
+    let duration_str: String = format!("{}.{}", total_duration.as_secs(), total_duration.subsec_nanos());
+    let duration: f64 =  duration_str.parse::<f64>().unwrap() as f64;
+
+    bench_host_instance_summary.host_duration = duration;
+
+    // Get the earliest start_time and latest end_time of all of the threads for the given host.
+    // This is used to determine true throughput for host. This data will then go to a collector
+    // that runs the stats for all hosts before presenting final results.
+
+    // NB: Only one host for now...
+
     // Get host results (vec of the thread results)
     bench_host_instance_results(&mut bench_host_instance_summary);
 
     // Pass the bench_host_instance_summary of each host back to the master/primary
     // and add them to bench_host_instance_operations
 
-    // This should be called for each host
-    bench_host_instance_operations.push(bench_host_instance_summary);
-    bench_summary = BenchSummary::new(bench_host_instance_operations);
-
-    // Get results (vec of the hosts results)
-    bench_results(bench_request, &mut bench_summary, bench_output);
+    bench_host_instance_summary
 }
+*/
 
 // Use this function if you want to generate a number of actual files of a given size with a given
 // prefix (i.e. 'file').
@@ -736,7 +975,8 @@ fn gen_files(tmp_dir: &str, base_object_name: &str, iterations: u64, size: u64) 
 }
 
 // Moves the Vec Operations into BenchOperations and adds them to thread_summary
-fn bench_thread_results(operations: &Vec<Operation>) -> (BenchThread, Vec<BenchOperation>) {
+//fn bench_thread_results(operations: &Vec<Operation>) -> (BenchThread, Vec<BenchOperation>, DateTime<UTC>, DateTime<UTC>) {
+fn bench_thread_results(operations: &[Operation]) -> (BenchThread, Vec<BenchOperation>, DateTime<UTC>, DateTime<UTC>) {
     let mut total_errors: u64 = 0;
     //let mut total_duration: f64 = 0.0;
     let mut total_duration = Duration::new(0,0);
@@ -744,6 +984,9 @@ fn bench_thread_results(operations: &Vec<Operation>) -> (BenchThread, Vec<BenchO
 
     let mut bench_operations: Vec<BenchOperation> = Vec::with_capacity(operations.len());
     let mut bench_thread_summary = BenchThread::default();
+
+    let mut start: DateTime<UTC> = UTC::now();
+    let mut end: DateTime<UTC> = UTC::now();
 
     bench_thread_summary.total_requests = operations.len() as u64;
 
@@ -765,6 +1008,17 @@ fn bench_thread_results(operations: &Vec<Operation>) -> (BenchThread, Vec<BenchO
             bop.object = op.object.clone();
         }
 
+        bop.start_time = op.start_time.unwrap().format("%Y-%m-%d %H:%M:%S%.9f %z").to_string();
+        bop.end_time = op.end_time.unwrap().format("%Y-%m-%d %H:%M:%S%.9f %z").to_string();
+
+        if op.start_time.unwrap() <= start {
+            start = op.start_time.unwrap();
+        }
+
+        if op.end_time.unwrap() >= end {
+            end = op.end_time.unwrap();
+        }
+
         total_duration += duration;
         total_payload += op.payload_size;
 
@@ -784,7 +1038,7 @@ fn bench_thread_results(operations: &Vec<Operation>) -> (BenchThread, Vec<BenchO
     bench_thread_summary.total_success = bench_thread_summary.total_requests - bench_thread_summary.total_errors;
     bench_thread_summary.total_throughput = (bench_thread_summary.total_requests as f64 / duration) as f64;
 
-    (bench_thread_summary, bench_operations)
+    (bench_thread_summary, bench_operations, start, end)
 }
 
 // Rolls up all of the thread summaries for a given host
@@ -818,6 +1072,7 @@ fn bench_host_instance_results(bench_host_instance_summary: &mut BenchHostInstan
     bench_host_instance_summary.total_throughput = (total_requests as f64 / total_duration) as f64;
 }
 
+// Rolls up the hosts for a summary... For now there is only one hosts...
 fn bench_results(metadata: BenchRequest,
                  bench_summary: &mut BenchSummary,
                  output: BenchOutput) -> () {
@@ -832,7 +1087,7 @@ fn bench_results(metadata: BenchRequest,
     let operations = bench_summary.clone();
 
     // Just rolling up totals...
-    for op in operations.operations {
+    for op in operations.operations.unwrap() {
         total_duration += op.total_duration;
         total_payload += op.total_payload;
         total_errors += op.total_errors;
@@ -843,14 +1098,32 @@ fn bench_results(metadata: BenchRequest,
         total_host_instances += 1;
     }
 
-    bench_summary.total_duration = total_duration;
+    // Only has one host for now so we can cheat :)
+    let summary = bench_summary.clone().operations.unwrap();
+    bench_summary.start_time = summary[0].start_time.clone();
+    bench_summary.end_time = summary[0].end_time.clone();
+
+    // Looks at the earliest thread start time and the latest end time and then recomputes totals
+    let start_time = DateTime::parse_from_str(&bench_summary.start_time, "%Y-%m-%d %H:%M:%S%.9f %z");
+    let end_time = DateTime::parse_from_str(&bench_summary.end_time, "%Y-%m-%d %H:%M:%S%.9f %z");
+
+    let dur: Duration = (end_time.unwrap() - start_time.unwrap()).to_std().unwrap();
+    let duration_str: String = format!("{}.{}", dur.as_secs(), dur.subsec_nanos());
+    let duration: f64 =  duration_str.parse::<f64>().unwrap() as f64;
+
+    bench_summary.total_duration = duration;
     bench_summary.total_errors = total_errors;
     bench_summary.total_payload = total_payload;
     bench_summary.total_threads = total_threads;
     bench_summary.total_host_instances = total_host_instances;
     bench_summary.total_success = total_success;
     bench_summary.total_requests = total_requests;
-    bench_summary.total_throughput = (total_requests as f64 / total_duration) as f64;
+    bench_summary.total_throughput = (total_requests as f64 / duration) as f64;
+
+    // NB: *If the report type contains summary then make bench_summary.operations = None
+    if metadata.report.contains("Summary") {
+        bench_summary.operations = None;
+    }
 
     let bench_results = BenchResults::new(metadata, bench_summary.clone());
 

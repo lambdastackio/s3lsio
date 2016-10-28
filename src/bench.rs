@@ -31,7 +31,13 @@ use rustc_serialize::base64::{STANDARD, ToBase64};
 
 use clap::ArgMatches;
 use aws_sdk_rust::aws::errors::s3::S3Error;
-use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
+//use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
+use aws_sdk_rust::aws::s3::s3client::S3Client;
+use aws_sdk_rust::aws::s3::endpoint::*;
+
+use aws_sdk_rust::aws::common::credentials::{AwsCredentialsProvider, DefaultCredentialsProviderSync};
+use aws_sdk_rust::aws::common::region::Region;
+
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 use aws_sdk_rust::aws::common::common::Operation;
 use aws_sdk_rust::aws::s3::acl::*;
@@ -50,43 +56,43 @@ use Commands;
 /// Benchmarks do not write the data to disk after GETs like a normal operation does. It does
 /// however create synthetic data in a temporary directory that is specified.
 ///
-pub fn commands<'a, 'b, P, D>(matches: &ArgMatches,
+pub fn commands<'a, P, D>(matches: &ArgMatches,
                               cmd: Commands,
-                              duration: &'b Duration,
+                              duration: Duration,
                               iterations: u64,
                               virtual_users: u32,
                               len: u64,
-                              prefix: &str,
+                              base_object_name: &str,
                               operations: &'a mut Vec<Operation>,
                               client: &Client<P, D>) -> Result<(), S3Error>
-                              where P: AwsCredentialsProvider,
-                                    D: DispatchSignedRequest,
+                              where P: AwsCredentialsProvider + Sync + Send,
+                                    D: DispatchSignedRequest + Sync + Send,
 {
     let mut bucket: &str = "";
-    let mut object: String = "".to_string();
+    //let mut object: String = "".to_string();
     // Make sure the s3 schema prefix is present
     let (scheme, tmp_bucket) = matches.value_of("bucket").unwrap_or("s3:// ").split_at(5);
 
-    if tmp_bucket.contains("/") {
+    if tmp_bucket.contains('/') {
         let components: Vec<&str> = tmp_bucket.split('/').collect();
         let mut first: bool = true;
-        let mut object_first: bool = true;
+        //let mut object_first: bool = true;
 
         for part in components {
             if first {
                 bucket = part;
-            } else {
-                if !object_first {
-                    object += "/";
-                }
-                object_first = false;
-                object += part;
-            }
+                break;
+            } //else {
+            //    if !object_first {
+            //        object += "/";
+            //    }
+            //    object_first = false;
+            //    object += part;
+            //}
             first = false;
         }
     } else {
         bucket = tmp_bucket.trim();
-        object = "".to_string();
     }
 
     // NOTE: Change the User-Agent to mean something in the logs
@@ -95,25 +101,64 @@ pub fn commands<'a, 'b, P, D>(matches: &ArgMatches,
 
     match cmd {
         Commands::get => {
-            let result = get_bench(bucket, prefix, &duration, iterations, operations, client);
+            let result = get_bench(bucket, base_object_name, &duration, iterations, operations, client);
         },
         Commands::put => {
             let path = matches.value_of("path").unwrap_or("");
-            let result = put_bench(bucket, path, prefix, &duration, iterations, len, operations, client);
+            let result = put_bench(bucket, path, base_object_name, &duration, iterations, len, operations, client);
         },
         Commands::range => {
             let offset: u64 = matches.value_of("offset").unwrap_or("0").parse().unwrap_or(0);
             let len: u64 = matches.value_of("len").unwrap_or("0").parse().unwrap_or(0);
             if len == 0 {
-                let error = format!("Error Byte-Range request: Len must be > 0");
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(S3Error::new(error));
+                println_color_quiet!(client.is_quiet, client.error.color, "Error Byte-Range request: Len must be > 0");
+                return Err(S3Error::new("Error Byte-Range request: Len must be > 0"));
             }
-            let mut operation = Operation::default();
-            let result = get_object_range(bucket, &object, offset, len, Some(&mut operation), client);
-            println!("{:#?}", operation);
+            let result = get_range_bench(bucket, base_object_name, duration, iterations, offset, len, operations, client);
         },
         _ => {}
+    }
+
+    Ok(())
+}
+
+fn get_range_bench<'a, 'b, P, D>(bucket: &str,
+                                 base_object_name: &str,
+                                 duration: Duration,
+                                 iterations: u64,
+                                 offset: u64,
+                                 len: u64,
+                                 operations: &'a mut Vec<Operation>,
+                                 client: &Client<P, D>) -> Result<(), S3Error>
+                                 where P: AwsCredentialsProvider,
+                                       D: DispatchSignedRequest,
+{
+    let mut object: String;
+
+    if iterations > 0 {
+        for i in 0..iterations {
+            let mut operation: Operation;
+            operation = Operation::default();
+            object = format!("{}{:04}", base_object_name, i+1);
+            let result = get_object_range(bucket, &object, offset, len, Some(&mut operation), client);
+            operations.push(operation);
+        }
+    } else if duration.as_secs() > 0 {
+        let mut count: u64 = 0;
+        let now = Instant::now();
+
+        loop {
+            let mut operation: Operation;
+            operation = Operation::default();
+            object = format!("{}{:04}", base_object_name, count+1);
+            let result = get_object_range(bucket, &object, offset, len, Some(&mut operation), client);
+            operations.push(operation);
+            //if now.elapsed() >= *duration {
+            if now.elapsed() >= duration {
+                break;
+            }
+            count += 1;
+        }
     }
 
     Ok(())
@@ -134,7 +179,7 @@ fn get_bench<'a, 'b, P, D>(bucket: &str,
         for i in 0..iterations {
             let mut operation: Operation;
             operation = Operation::default();
-            object = format!("{}{:04}", base_object_name, i);
+            object = format!("{}{:04}", base_object_name, i+1);
             let result = get_object(bucket, &object, Some(&mut operation), client);
             operations.push(operation);
         }
@@ -145,10 +190,68 @@ fn get_bench<'a, 'b, P, D>(bucket: &str,
         loop {
             let mut operation: Operation;
             operation = Operation::default();
-            object = format!("{}{:04}", base_object_name, count);
+            object = format!("{}{:04}", base_object_name, count+1);
             let result = get_object(bucket, &object, Some(&mut operation), client);
             operations.push(operation);
             if now.elapsed() >= *duration {
+                break;
+            }
+            count += 1;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn do_get_bench<'a>(bucket: &str,
+                        base_object_name: &str,
+                        duration: Duration,
+                        iterations: u64,
+                        operations: &'a mut Vec<Operation>) -> Result<(), S3Error>
+{
+    let mut object: String;
+
+    if iterations > 0 {
+        for i in 0..iterations {
+            let mut operation = Operation::default();
+
+            // NB: For benchmarking, the objects are synthetic and in a predictable naming format.
+            object = format!("{}{:04}", base_object_name, i+1);
+
+            let mut request = GetObjectRequest::default();
+            request.bucket = bucket.to_string();
+            request.key = object;
+
+            let provider = DefaultCredentialsProviderSync::new(None).unwrap();
+            let endpoint = Endpoint::new(Region::UsEast1,
+                                         Signature::V2,
+                                         None,
+                                         None,
+                                         Some(format!("s3lsio - {}", "V2")));
+
+            let s3client = S3Client::new(provider, endpoint);
+            match s3client.get_object(&request, Some(&mut operation)) {
+                Ok(output) => {},
+                Err(e) => {
+                    println!("Failed to get it...");
+                    //let error = format!("{:#?}", e);
+                    //println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+                    //Err(S3Error::new(error))
+                },
+            }
+
+            operations.push(operation);
+        }
+    } else if duration.as_secs() > 0 {
+        let mut count: u64 = 0;
+        let now = Instant::now();
+
+        loop {
+            let mut operation = Operation::default();
+            object = format!("{}{:04}", base_object_name, count+1);
+            //let result = get_object(bucket, &object, Some(&mut operation), client);
+            operations.push(operation);
+            if now.elapsed() >= duration {
                 break;
             }
             count += 1;
@@ -176,7 +279,7 @@ fn put_bench<'a, 'b, P, D>(bucket: &str,
         for i in 0..iterations {
             let mut operation: Operation;
             operation = Operation::default();
-            key = format!("{}{:04}", base_object_name, i);
+            key = format!("{}{:04}", base_object_name, i+1);
             object = format!("{}/{}", path, key);
             let result = put_object(bucket, &key, &object, len, Some(&mut operation), client);
             operations.push(operation);
@@ -188,7 +291,7 @@ fn put_bench<'a, 'b, P, D>(bucket: &str,
         loop {
             let mut operation: Operation;
             operation = Operation::default();
-            key = format!("{}{:04}", base_object_name, count);
+            key = format!("{}{:04}", base_object_name, count+1);
             object = format!("{}/{}", path, key);
             let result = put_object(bucket, &key, &object, len, Some(&mut operation), client);
             operations.push(operation);
@@ -279,10 +382,7 @@ fn put_object<P, D>(bucket: &str,
             },
         }
     } else {
-        buffer = Vec::with_capacity(len as usize);
-        for i in 0..len {
-            buffer.push(0);
-        }
+        zero_fill_buffer!(buffer, len);
     }
 
     let correct_key: String;
@@ -393,13 +493,12 @@ fn put_multipart_upload<P, D>(bucket: &str,
                               where P: AwsCredentialsProvider,
                                     D: DispatchSignedRequest,
 {
-    let correct_key: String;
-    if key.is_empty() {
+    let correct_key = if key.is_empty() {
         let path = Path::new(object);
-        correct_key = path.file_name().unwrap().to_str().unwrap().to_string();
+        path.file_name().unwrap().to_str().unwrap().to_string()
     } else {
-        correct_key = key.to_string();
-    }
+        key.to_string()
+    };
 
     // Create multipart
     let create_multipart_upload: MultipartUploadCreateOutput;

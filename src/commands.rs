@@ -55,7 +55,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
     // Make sure the s3 schema prefix is present
     let (scheme, tmp_bucket) = matches.value_of("bucket").unwrap_or("s3:// ").split_at(5);
 
-    if tmp_bucket.contains("/") {
+    if tmp_bucket.contains('/') {
         let components: Vec<&str> = tmp_bucket.split('/').collect();
         let mut first: bool = true;
         let mut object_first: bool = true;
@@ -110,7 +110,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                 get = false;
                 let (scheme, tmp_bucket) = matches.value_of("path").unwrap_or("s3:// ").split_at(5);
 
-                if tmp_bucket.contains("/") {
+                if tmp_bucket.contains('/') {
                     let components: Vec<&str> = tmp_bucket.split('/').collect();
                     let mut first: bool = true;
                     let mut object_first: bool = true;
@@ -124,7 +124,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                             }
                             object_first = false;
                             object += part;
-                            last = part;
+                            //last = part;
                         }
                         first = false;
                     }
@@ -139,7 +139,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                 cmd_get(bucket, &object, &path, client);
             } else {
                 let part_size: u64 = matches.value_of("size").unwrap_or("0").parse().unwrap_or(0);
-                cmd_put(bucket, &object, &path, part_size, client);                
+                cmd_put(bucket, &object, &path, part_size, client);
             }
 
             Ok(())
@@ -152,9 +152,8 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                 path = last.to_string();
             }
             if len == 0 {
-                let error = format!("Error Byte-Range request: Len must be > 0");
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(S3Error::new(error));
+                println_color_quiet!(client.is_quiet, client.error.color, "Error Byte-Range request: Len must be > 0");
+                return Err(S3Error::new("Error Byte-Range request: Len must be > 0"));
             }
             let mut operation = Operation::default();
             let result = get_object_range(bucket, &object, offset, len, &path, Some(&mut operation), client);
@@ -190,9 +189,8 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                     OutputFormat::PrettyJSON => {
                         println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&acl));
                     },
-                    OutputFormat::None => {},
-                    OutputFormat::NoneAll => {},
-                    e @ _ => println_color_quiet!(client.is_quiet, client.error.color, "Error: Format - {:#?}", e),
+                    OutputFormat::None | OutputFormat::NoneAll => {},
+                    e => println_color_quiet!(client.is_quiet, client.error.color, "Error: Format - {:#?}", e),
                 }
             } else {
                 let acl = try!(get_object_acl(bucket, &object, client));
@@ -212,22 +210,11 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             let option = matches.value_of("option").unwrap_or("");
             if bucket.is_empty() {
                 let list = try!(get_buckets_list(client));
-            } else {
-                if bucket.contains("/") {
-                    let components: Vec<&str> = bucket.split('/').collect();
-                    bucket = components[0];
-                    if components[1].len() == 0 {
-                        // List objects in bucket.
-                        if option.is_empty() {
-                            let list = try!(get_object_list(bucket, &object, 1, client));
-                        } else if option == "multi" {
-                            let upload_id = matches.value_of("upload_id").unwrap_or("");
-                            let list = try!(get_object_multipart_list(bucket, upload_id, &object, client));
-                        } else {
-                            let list = try!(get_object_version_list(bucket, &object, option, client));
-                        }
-                    }
-                } else {
+            } else if bucket.contains('/') {
+                let components: Vec<&str> = bucket.split('/').collect();
+                bucket = components[0];
+                if components[1].is_empty() {
+                    // List objects in bucket.
                     if option.is_empty() {
                         let list = try!(get_object_list(bucket, &object, 1, client));
                     } else if option == "multi" {
@@ -237,15 +224,22 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
                         let list = try!(get_object_version_list(bucket, &object, option, client));
                     }
                 }
-            }
+            } else if option.is_empty() {
+                    let list = try!(get_object_list(bucket, &object, 1, client));
+                } else if option == "multi" {
+                    let upload_id = matches.value_of("upload_id").unwrap_or("");
+                    let list = try!(get_object_multipart_list(bucket, upload_id, &object, client));
+                } else {
+                    let list = try!(get_object_version_list(bucket, &object, option, client));
+                }
+
             Ok(())
         },
         /// create new bucket
         Commands::mb => {
             if bucket.is_empty() {
-                let error = format!("missing bucket name");
-                println_color_quiet!(client.is_quiet, term::color::RED, "{}", error);
-                Err(S3Error::new(error))
+                println_color_quiet!(client.is_quiet, term::color::RED, "missing bucket name");
+                Err(S3Error::new("missing bucket name"))
             } else {
                 let result = create_bucket(bucket, client);
                 Ok(())
@@ -341,13 +335,11 @@ fn cmd_put<P, D>(bucket: &str, object: &str, path: &str, part_size: u64, client:
             let compute_hash: bool = false; // Change this to an option via the config
             let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
         }
+    } else if part_size < PART_SIZE_MIN {
+        let result = put_object(bucket, &object, path, None, client);
     } else {
-        if part_size < PART_SIZE_MIN {
-            let result = put_object(bucket, &object, path, None, client);
-        } else {
-            let compute_hash: bool = false; // Change this to an option via the config
-            let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
-        }
+        let compute_hash: bool = false; // Change this to an option via the config
+        let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
     }
 
     Ok(())
@@ -530,8 +522,7 @@ fn set_bucket_acl<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D
 
     match cli_acl.as_ref() {
         "public-read" => acl = CannedAcl::PublicRead,
-        "public-rw" => acl = CannedAcl::PublicReadWrite,
-        "public-readwrite" => acl = CannedAcl::PublicReadWrite,
+        "public-rw" | "public-readwrite" => acl = CannedAcl::PublicReadWrite,
         "private" => acl = CannedAcl::Private,
         _ => {
             println_color_quiet!(client.is_quiet,
@@ -708,11 +699,6 @@ fn get_object_version_list<P, D>(bucket: &str,
                 OutputFormat::PrettyJSON => {
                     println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
                 },
-                OutputFormat::Simple => {
-                    // for object in output.contents {
-                    // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
-                    // }
-                },
                 _ => {},
             }
 
@@ -756,11 +742,6 @@ fn get_object_multipart_list<P, D>(bucket: &str, upload_id: &str, key: &str, cli
                     OutputFormat::PrettyJSON => {
                         println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
                     },
-                    OutputFormat::Simple => {
-                        // for object in output.contents {
-                        // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
-                        // }
-                    },
                     _ => {},
                 }
 
@@ -798,11 +779,6 @@ fn get_object_multipart_list<P, D>(bucket: &str, upload_id: &str, key: &str, cli
                     },
                     OutputFormat::PrettyJSON => {
                         println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
-                    },
-                    OutputFormat::Simple => {
-                        // for object in output.contents {
-                        // println_color_quiet!(client.is_quiet, client.output.color, "s3://{}/{}", bucket, object.key);
-                        // }
                     },
                     _ => {},
                 }
@@ -1001,13 +977,13 @@ fn put_object<P, D>(bucket: &str, key: &str, object: &str, operation: Option<&mu
         },
     }
 
-    let correct_key: String;
-    if key.is_empty() {
+    let correct_key = if key.is_empty() {
         let path = Path::new(object);
-        correct_key = path.file_name().unwrap().to_str().unwrap().to_string();
+        path.file_name().unwrap().to_str().unwrap().to_string()
     } else {
-        correct_key = key.to_string();
-    }
+        key.to_string()
+    };
+
     let mut request = PutObjectRequest::default();
     request.bucket = bucket.to_string();
     request.key = correct_key;
@@ -1102,13 +1078,12 @@ fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: 
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
-    let correct_key: String;
-    if key.is_empty() {
+    let correct_key = if key.is_empty() {
         let path = Path::new(object);
-        correct_key = path.file_name().unwrap().to_str().unwrap().to_string();
+        path.file_name().unwrap().to_str().unwrap().to_string()
     } else {
-        correct_key = key.to_string();
-    }
+        key.to_string()
+    };
 
     // Create multipart
     let create_multipart_upload: MultipartUploadCreateOutput;
