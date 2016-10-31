@@ -59,6 +59,7 @@ extern crate time;
 extern crate chrono;
 
 use std::io;
+use std::io::Write;
 use std::env;
 use std::path::PathBuf;
 use std::fs;
@@ -74,6 +75,7 @@ use clap::{Shell, ArgMatches};
 use url::Url;
 use rustc_serialize::json;
 use chrono::{UTC, DateTime};
+use pbr::{ProgressBar, MultiBar};
 
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::s3::endpoint::*;
@@ -388,10 +390,10 @@ impl BenchResults {
 ///
 pub struct Client<'a, P: 'a, D: 'a>
     where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest, // T: Write,
+          D: DispatchSignedRequest,
 {
     pub s3client: &'a mut S3Client<P, D>,
-    pub config: &'a mut config::Config, // pub pbr: ProgressBar<T>,
+    pub config: &'a mut config::Config,
     pub error: Error,
     pub output: Output,
     pub is_quiet: bool,
@@ -583,7 +585,7 @@ fn main() {
                                                  iterations: iterations,
                                                  duration: duration,
                                                  virtual_users: virtual_users,
-                                                 request_type: "".to_string(),
+                                                 request_type: "GET".to_string(),
                                                  size: 0,
                                                  nodes: nodes};
                 let bench_host_instance_summary = host_controller(sub_matches, Commands::get, duration, nodes, iterations, virtual_users, 0, endpoint_clone);
@@ -601,7 +603,7 @@ fn main() {
                                                  iterations: iterations,
                                                  duration: duration,
                                                  virtual_users: virtual_users,
-                                                 request_type: "".to_string(),
+                                                 request_type: "PUT".to_string(),
                                                  size: size,
                                                  nodes: nodes};
                 let bench_host_instance_summary = host_controller(sub_matches, Commands::put, duration, nodes, iterations, virtual_users, size, endpoint_clone);
@@ -626,7 +628,7 @@ fn main() {
                                                  iterations: iterations,
                                                  duration: duration,
                                                  virtual_users: virtual_users,
-                                                 request_type: "".to_string(),
+                                                 request_type: "BYTE-RANGE".to_string(),
                                                  size: 0,
                                                  nodes: nodes};
                 let bench_host_instance_summary = host_controller(sub_matches, Commands::range, duration, nodes, iterations, virtual_users, 0, endpoint_clone);
@@ -765,12 +767,16 @@ fn host_benchmark(matches: &ArgMatches,
         }
     }
 
+    let mut pbb = ProgressBar::new(100);
+
     for i in 0..virtual_users {
         let t_arc = arc.clone();
         let t_arc_start_times = arc_start_times.clone();
         let t_arc_end_times = arc_end_times.clone();
         let t_bucket = bucket.clone();
         let t_endpoint = endpoint.clone();
+
+        pbb.inc();
 
         // Spawn the threads which represent virtual users
         let handle = thread::spawn(move || {
@@ -871,6 +877,8 @@ fn host_benchmark(matches: &ArgMatches,
 
     // Pass the bench_host_instance_summary of each host back to the master/primary
     // and add them to bench_host_instance_operations
+
+    pbb.finish();
 
     Some(bench_host_instance_summary)
 }
@@ -1041,7 +1049,12 @@ fn bench_results(metadata: BenchRequest,
     let duration_str: String = format!("{}.{}", dur.as_secs(), dur.subsec_nanos());
     let duration: f64 =  duration_str.parse::<f64>().unwrap() as f64;
 
-    bench_summary.total_duration = duration;
+    // Truncates off the decimal portion for duration tests
+    if metadata.iterations == 0 {
+        bench_summary.total_duration = duration.trunc();
+    } else {
+        bench_summary.total_duration = duration;
+    }
     bench_summary.total_errors = total_errors;
     bench_summary.total_payload = total_payload;
     bench_summary.total_threads = total_threads;

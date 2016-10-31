@@ -247,11 +247,31 @@ pub fn do_get_bench<'a>(bucket: &str,
         loop {
             let mut operation = Operation::default();
             object = format!("{}{:04}", base_object_name, count+1);
-            //let result = get_object(bucket, &object, Some(&mut operation), client);
-            operations.push(operation);
+
+            let mut request = GetObjectRequest::default();
+            request.bucket = bucket.to_string();
+            request.key = object.clone();
+            if range.is_some() {
+                request.range = Some(range.unwrap().clone().to_string());
+            }
+
+            let provider = DefaultCredentialsProviderSync::new(None).unwrap();
+            let local_endpoint = endpoint.clone();
+            let s3client = S3Client::new(provider, local_endpoint);
+
+            match s3client.get_object(&request, Some(&mut operation)) {
+                Ok(output) => {},
+                Err(e) => {
+                    println_color_red!("Failed to get [{}/{}] - {}", bucket, object, e);
+                },
+            }
+
             if now.elapsed() >= duration {
+                operations.push(operation);
                 break;
             }
+
+            operations.push(operation);
             count += 1;
         }
     }
@@ -305,11 +325,33 @@ pub fn do_put_bench<'a>(bucket: &str,
         loop {
             let mut operation = Operation::default();
             object = format!("{}{:04}", base_object_name, count+1);
-            //let result = get_object(bucket, &object, Some(&mut operation), client);
-            operations.push(operation);
+
+            // Synthetic buffer creation to simulate an on disk object
+            let mut buffer: Vec<u8>;
+            zero_fill_buffer!(buffer, size);
+
+            let mut request = PutObjectRequest::default();
+            request.bucket = bucket.to_string();
+            request.key = object.clone();
+            request.body = Some(&buffer);
+
+            let provider = DefaultCredentialsProviderSync::new(None).unwrap();
+            let local_endpoint = endpoint.clone();
+            let s3client = S3Client::new(provider, local_endpoint);
+
+            match s3client.put_object(&request, Some(&mut operation)) {
+                Ok(output) => {},
+                Err(e) => {
+                    println_color_red!("Failed to put [{}/{}] - {}", bucket, object, e);
+                },
+            }
+
             if now.elapsed() >= duration {
+                operations.push(operation);
                 break;
             }
+
+            operations.push(operation);
             count += 1;
         }
     }

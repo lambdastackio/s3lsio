@@ -1,5 +1,5 @@
 Name:    s3lsio
-Version: 0.1.9
+Version: 0.1.10
 Release: 0%{?dist}
 Summary: AWS S3 and Ceph command-line utility and benchmarking.
 
