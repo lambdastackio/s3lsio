@@ -14,6 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# NOTE: Building a RHEL or CentOS version (assumes version dev tools installed)
+# sudo yum install -y openssl openssl-devel cmake
+# Get nightly version of rust because lint tools depend on it. Don't use "stable" version
+# curl -sSf https://static.rust-lang.org/rustup.sh | sh -s -- --channel=nightly
+
 # NOTE: MUST be ran as root
 
 REPO_BASE=$(git rev-parse --show-toplevel)
