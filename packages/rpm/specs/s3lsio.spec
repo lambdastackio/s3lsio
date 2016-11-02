@@ -17,3 +17,5 @@ install -p -m 0755 %{SOURCE0} $RPM_BUILD_ROOT/usr/bin
 /usr/bin/%{name}
 
 %changelog
+* Tue Nov 1 2016 - 0.1.10 build - Added virtual bucket options for non AWS environments
+- Initial build

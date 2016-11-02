@@ -813,13 +813,12 @@ fn object_get<P, D>(request: &GetObjectRequest, path: &str, operation: Option<&m
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
-
     match client.s3client.get_object(&request, operation) {
         Ok(output) => {
             // NoneAll means no writing to disk or stdout
             if client.output.format != OutputFormat::NoneAll {
                 let mut file = File::create(path).unwrap();
-                match file.write_all(&output.body) {
+                match file.write_all(output.get_body()) {
                     Ok(_) => {
                         // NOTE: Need to remove body from output (after it writes out) by making it mut so that
                         // items below can output metadata OR place body in different element than others.

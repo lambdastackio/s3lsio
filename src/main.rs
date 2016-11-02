@@ -472,6 +472,11 @@ fn main() {
         is_bench = true;
     }
 
+    let is_bucket_virtual = match matches.value_of("is_bucket_virtual").unwrap().to_string().to_lowercase().as_ref() {
+        "false" => false,
+        _ => true,
+    };
+
     let output_format = match matches.value_of("output-format").unwrap().to_string().to_lowercase().as_ref() {
         "csv" => OutputFormat::CSV,
         "json" => OutputFormat::JSON,
@@ -536,7 +541,8 @@ fn main() {
                                  },
                                  config.clone().endpoint,
                                  config.clone().proxy,
-                                 Some(format!("s3lsio - {}", version)));
+                                 Some(format!("s3lsio - {}", version)),
+                                 Some(is_bucket_virtual));
 
     let endpoint_clone = endpoint.clone();
 
