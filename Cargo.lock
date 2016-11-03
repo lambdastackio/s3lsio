@@ -1,6 +1,6 @@
 [root]
 name = "s3lsio"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "aws-sdk-rust 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.2.25 (registry+https://github.com/rust-lang/crates.io-index)",

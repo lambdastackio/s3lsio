@@ -213,6 +213,7 @@ pub fn do_get_bench<'a>(bucket: &str,
 {
     let mut object: String;
 
+    // NB: For iterations we allocate new s3client each time to simulate single user transactions...
     if iterations > 0 {
         for i in 0..iterations {
             let mut operation = Operation::default();
@@ -244,20 +245,22 @@ pub fn do_get_bench<'a>(bucket: &str,
         let mut count: u64 = 0;
         let now = Instant::now();
 
+        let provider = DefaultCredentialsProviderSync::new(None).unwrap();
+        let local_endpoint = endpoint.clone();
+        let s3client = S3Client::new(provider, local_endpoint);
+
+        // NOTE: Don't need to move the GetObjectRequest to the loop like you do on put object...
+        let mut request = GetObjectRequest::default();
+        request.bucket = bucket.to_string();
+        if range.is_some() {
+            request.range = Some(range.unwrap().clone().to_string());
+        }
+
         loop {
             let mut operation = Operation::default();
             object = format!("{}{:04}", base_object_name, count+1);
 
-            let mut request = GetObjectRequest::default();
-            request.bucket = bucket.to_string();
             request.key = object.clone();
-            if range.is_some() {
-                request.range = Some(range.unwrap().clone().to_string());
-            }
-
-            let provider = DefaultCredentialsProviderSync::new(None).unwrap();
-            let local_endpoint = endpoint.clone();
-            let s3client = S3Client::new(provider, local_endpoint);
 
             match s3client.get_object(&request, Some(&mut operation)) {
                 Ok(output) => {},
@@ -289,6 +292,7 @@ pub fn do_put_bench<'a>(bucket: &str,
 {
     let mut object: String;
 
+    // NB: For iterations we allocate new s3client each time to simulate single user transactions...
     if iterations > 0 {
         for i in 0..iterations {
             let mut operation = Operation::default();
@@ -322,6 +326,11 @@ pub fn do_put_bench<'a>(bucket: &str,
         let mut count: u64 = 0;
         let now = Instant::now();
 
+        let provider = DefaultCredentialsProviderSync::new(None).unwrap();
+        let local_endpoint = endpoint.clone();
+        let s3client = S3Client::new(provider, local_endpoint);
+
+
         loop {
             let mut operation = Operation::default();
             object = format!("{}{:04}", base_object_name, count+1);
@@ -334,10 +343,6 @@ pub fn do_put_bench<'a>(bucket: &str,
             request.bucket = bucket.to_string();
             request.key = object.clone();
             request.body = Some(&buffer);
-
-            let provider = DefaultCredentialsProviderSync::new(None).unwrap();
-            let local_endpoint = endpoint.clone();
-            let s3client = S3Client::new(provider, local_endpoint);
 
             match s3client.put_object(&request, Some(&mut operation)) {
                 Ok(output) => {},
