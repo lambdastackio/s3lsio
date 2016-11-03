@@ -2,7 +2,7 @@
 name = "s3lsio"
 version = "0.1.12"
 dependencies = [
- "aws-sdk-rust 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)",
+ "aws-sdk-rust 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.2.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.17.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "clippy 0.0.96 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -36,7 +36,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "aws-sdk-rust"
-version = "0.1.29"
+version = "0.1.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "chrono 0.2.25 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -745,7 +745,7 @@ dependencies = [
 [metadata]
 "checksum aho-corasick 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ca972c2ea5f742bfce5687b9aef75506a764f61d37f8f649047846a9686ddb66"
 "checksum ansi_term 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "23ac7c30002a5accbf7e8987d0632fa6de155b7c3d39d0067317a391e00a2ef6"
-"checksum aws-sdk-rust 0.1.29 (registry+https://github.com/rust-lang/crates.io-index)" = "8788a0ef30331708ac708ad031b7acacfc25bd3a70604cf5260ee7a4449c63ed"
+"checksum aws-sdk-rust 0.1.32 (registry+https://github.com/rust-lang/crates.io-index)" = "ad94fbaee9eb5fca9667744dea0465b354f7e6dcb584dfbabff850b5d993f1d1"
 "checksum bitflags 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "2a6577517ecd0ee0934f48a7295a89aaef3e6dfafeac404f94c0b3448518ddfe"
 "checksum bitflags 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "aad18937a628ec6abcd26d1489012cc0e18c21798210f491af69ded9b881106d"
 "checksum chrono 0.2.25 (registry+https://github.com/rust-lang/crates.io-index)" = "9213f7cd7c27e95c2b57c49f0e69b1ea65b27138da84a170133fd21b07659c00"
