@@ -1,5 +1,5 @@
 Name:    s3lsio
-Version: 0.1.11
+Version: 0.1.12
 Release: 0
 Summary: AWS S3 and Ceph command-line utility and benchmarking.
 
@@ -17,5 +17,7 @@ install -p -m 0755 %{SOURCE0} $RPM_BUILD_ROOT/usr/bin
 /usr/bin/%{name}
 
 %changelog
+* Thu Nov 3 2016 - 0.1.12 build - Added more safe guards and updated cli help
+* Wed Nov 2 2016 - 0.1.11 build - Added port to endpoint
 * Tue Nov 1 2016 - 0.1.10 build - Added virtual bucket options for non AWS environments
 - Initial build

@@ -257,6 +257,10 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             let list = try!(set_bucket_versioning(matches, bucket, client));
             Ok(())
         },
+        Commands::stats => {
+            let list = try!(stats(matches, bucket, &object, client));
+            Ok(())
+        },
         Commands::ver => {
             let list = try!(get_bucket_versioning(bucket, client));
             Ok(())
@@ -611,6 +615,12 @@ fn set_bucket_versioning<P, D>(matches: &ArgMatches, bucket: &str, client: &Clie
     }
 }
 
+fn stats<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Client<P, D>) -> Result<(), S3Error>
+    where P: AwsCredentialsProvider,
+          D: DispatchSignedRequest,
+{
+    Ok(())
+}
 
 // Objects...
 fn get_object_list<P, D>(bucket: &str, prefix: &str, list_version: u16, client: &Client<P, D>) -> Result<(), S3Error>

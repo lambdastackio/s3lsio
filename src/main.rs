@@ -97,6 +97,8 @@ mod config;
 mod commands;
 mod bench;
 
+static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+
 /// Allows you to set the output type for stderr and stdout.
 ///
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -130,6 +132,7 @@ pub enum Commands {
     ls,
     setacl,
     setver,
+    stats,
     ver,
 }
 
@@ -472,7 +475,7 @@ fn main() {
         is_bench = true;
     }
 
-    let is_bucket_virtual = match matches.value_of("is_bucket_virtual").unwrap().to_string().to_lowercase().as_ref() {
+    let is_bucket_virtual = match matches.value_of("bucket_virtual_host").unwrap().to_string().to_lowercase().as_ref() {
         "false" => false,
         _ => true,
     };
@@ -541,7 +544,7 @@ fn main() {
                                  },
                                  config.clone().endpoint,
                                  config.clone().proxy,
-                                 Some(format!("s3lsio - {}", version)),
+                                 Some(DEFAULT_USER_AGENT.to_string()),
                                  Some(is_bucket_virtual));
 
     let endpoint_clone = endpoint.clone();
@@ -675,6 +678,7 @@ fn main() {
             ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
             ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
             ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
+            ("stats", Some(sub_matches)) => commands::commands(sub_matches, Commands::stats, &mut client),
             ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
             (e, _) => {
                 println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
