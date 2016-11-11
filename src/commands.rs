@@ -35,6 +35,10 @@ use aws_sdk_rust::aws::common::common::Operation;
 use aws_sdk_rust::aws::s3::acl::*;
 use aws_sdk_rust::aws::s3::bucket::*;
 use aws_sdk_rust::aws::s3::object::*;
+use aws_sdk_rust::aws::s3::admin::*;
+
+// Use this for signing the admin feature for Ceph RGW
+use aws_sdk_rust::aws::common::signature::*;
 
 use Client;
 use Output;
@@ -615,10 +619,53 @@ fn set_bucket_versioning<P, D>(matches: &ArgMatches, bucket: &str, client: &Clie
     }
 }
 
+// Check for is_admin. If true then it's assumed this is for Ceph's RGW and NOT AWS.
 fn stats<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    let is_admin = client.is_admin;
+
+    if is_admin {
+        // Just Ceph RGW Admin related...
+        let mut request = AdminRequest::default();
+        request.bucket = Some(bucket.to_string());
+        request.object = Some(object.to_string());
+        // May want to add uid later...
+        request.params = Some(format!("&bucket={}&stats=True", bucket));
+
+        match client.s3client.admin_stats(&request) {
+            Ok(output) => {
+                match client.output.format {
+                    OutputFormat::Serialize => {
+                        // Could have already been serialized before being passed to this function.
+                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
+                    },
+                    OutputFormat::Plain => {
+                        // Could have already been serialized before being passed to this function.
+                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
+                    },
+                    OutputFormat::JSON => {
+                        println_color_quiet!(client.is_quiet,
+                                             client.output.color,
+                                             "{}",
+                                             json::encode(&output).unwrap_or("{}".to_string()));
+                    },
+                    OutputFormat::PrettyJSON => {
+                        println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
+                    },
+                    _ => {},
+                }
+            },
+            Err(error) => {
+                let format = format!("{:#?}", error);
+                let error = S3Error::new(format);
+                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
+                return Err(error);
+            },
+        }
+    }
+
     Ok(())
 }
 

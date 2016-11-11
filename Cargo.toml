@@ -1,6 +1,6 @@
 [package]
 name = "s3lsio"
-version = "0.1.14"
+version = "0.1.15"
 authors = ["Chris Jones"]
 license = "Apache-2.0"
 readme = "README.md"
@@ -13,7 +13,7 @@ S3lsio is a command line utility for AWS S3 operations. It support V2 and V4 sig
 that accept S3 APIs use V2 signatures. It can be used in scripts, called from other apps, cron etc. It's driven by JSON
 and can return data in JSON. It can also be used to keep buckets in sync.
 NB: This is an Alpha release so there are functions not currently present. Those that are missing are being added
-quickly.
+quickly. Also performs Ceph RGW Admin features.
 Install: [Cargo install s3lsio] OR download at http://www.lambdastack.io/s3lsio
 For help just run the cli: [s3lsio -h]
 """

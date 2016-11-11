@@ -357,13 +357,16 @@ impl BenchSummary {
 pub struct BenchRequest {
     pub date_time: String,
     pub description: String,
+    pub endpoint: String,
     pub report: String,
     pub iterations: u64,
     pub duration: u64,
     pub virtual_users: u32,
+    pub rampup: u32,
     pub request_type: String,
     pub size: u64,
     pub nodes: u32,
+    pub virtual_buckets: bool,
 }
 
 /// Allows for duration tracking of operations. You should not track time of this app running but
@@ -402,7 +405,8 @@ pub struct Client<'a, P: 'a, D: 'a>
     pub is_quiet: bool,
     pub is_time: bool,
     pub is_bench: bool,
-    pub bench: &'a str,
+    pub is_admin: bool,
+//    pub bench: &'a str,
 }
 
 fn main() {
@@ -410,6 +414,7 @@ fn main() {
     let mut is_quiet: bool = false;
     let mut is_time: bool = false;
     let mut is_bench: bool = false;
+    let mut is_admin: bool = false;
 
     env_logger::init().unwrap();
 
@@ -436,6 +441,11 @@ fn main() {
     // If the -q or --quiet flag was passed then shut off all output
     if matches.is_present("quiet") {
         is_quiet = true;
+    }
+
+    // If the -a or --admin flag was passed then allow Ceph RGW Admin access (provided keys have rights)
+    if matches.is_present("admin") {
+        is_admin = true;
     }
 
     // If the -t or --time flag was passed then track operation time
@@ -565,18 +575,22 @@ fn main() {
         is_quiet: is_quiet,
         is_time: is_time,
         is_bench: is_bench,
-        bench: bench.unwrap_or(""),
+        is_admin: is_admin,
+        //bench: bench.unwrap_or(""),
     };
 
     if is_bench {
         let mut bench_tmp_dir: &str = "";
         let options: Vec<&str> = bench.unwrap().split(':').collect();
+
+        // NB: Duration tests create one s3client per thread while iteration tests create a new s3client per requests per thread.
         // NOTE: Fix - Iterate over this and create defaults...
         let duration: u64 = options[0].parse().unwrap_or(0);
         let iterations: u64 = options[1].parse().unwrap_or(0);
         let virtual_users: u32 = options[2].parse().unwrap_or(0);
         let nodes: u32 = options[3].parse().unwrap_or(1);
-        let mut report: &str = options[4];
+        let rampup: u32 = options[4].parse().unwrap_or(0);
+        let mut report: &str = options[5];
         if report.is_empty() {
             report = "d"; // Detail
         }
@@ -585,17 +599,26 @@ fn main() {
             _ => "Detail Report",
         };
 
+        // Just default to AWS S3 Standard for now if nothing else
+        let ep = match ep_str {
+            Some(val) => val,
+            _ => "https://s3.amazonaws.com",
+        };
+
         let res = match matches.subcommand() {
             ("get", Some(sub_matches)) => {
                 // This part would go into each host instance
                 let bench_request = BenchRequest{description: "Benchmarking GET requests...".to_string(),
                                                  date_time: UTC::now().to_string(),
+                                                 endpoint: ep.to_string(),
                                                  report: report_desc.to_string(),
                                                  iterations: iterations,
                                                  duration: duration,
                                                  virtual_users: virtual_users,
                                                  request_type: "GET".to_string(),
+                                                 rampup: rampup,
                                                  size: 0,
+                                                 virtual_buckets: is_bucket_virtual,
                                                  nodes: nodes};
                 let bench_host_instance_summary = host_controller(sub_matches, Commands::get, duration, nodes, iterations, virtual_users, 0, endpoint_clone);
                 // It would then send the bench_host_instance_summary back to the master and process
@@ -608,12 +631,15 @@ fn main() {
                 let size: u64 = sub_matches.value_of("size").unwrap_or("4096").parse().unwrap_or(4096);
                 let bench_request = BenchRequest{description: "Benchmarking PUT requests...".to_string(),
                                                  date_time: UTC::now().to_string(),
+                                                 endpoint: ep.to_string(),
                                                  report: report_desc.to_string(),
                                                  iterations: iterations,
                                                  duration: duration,
                                                  virtual_users: virtual_users,
                                                  request_type: "PUT".to_string(),
+                                                 rampup: rampup,
                                                  size: size,
+                                                 virtual_buckets: is_bucket_virtual,
                                                  nodes: nodes};
                 let bench_host_instance_summary = host_controller(sub_matches, Commands::put, duration, nodes, iterations, virtual_users, size, endpoint_clone);
                 if bench_host_instance_summary.is_some() {
@@ -633,12 +659,15 @@ fn main() {
             ("range", Some(sub_matches)) => {
                 let bench_request = BenchRequest{description: "Benchmarking Byte-Range requests...".to_string(),
                                                  date_time: UTC::now().to_string(),
+                                                 endpoint: ep.to_string(),
                                                  report: report_desc.to_string(),
                                                  iterations: iterations,
                                                  duration: duration,
                                                  virtual_users: virtual_users,
                                                  request_type: "BYTE-RANGE".to_string(),
+                                                 rampup: rampup,
                                                  size: 0,
+                                                 virtual_buckets: is_bucket_virtual,
                                                  nodes: nodes};
                 let bench_host_instance_summary = host_controller(sub_matches, Commands::range, duration, nodes, iterations, virtual_users, 0, endpoint_clone);
                 if bench_host_instance_summary.is_some() {
