@@ -262,16 +262,17 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             let list = try!(set_bucket_versioning(matches, bucket, client));
             Ok(())
         },
-        Commands::stats => {
-            let list = try!(stats(matches, bucket, client));
+        Commands::ver => {
+            let list = try!(get_bucket_versioning(bucket, client));
+            Ok(())
+        },
+        // Ceph RGW Admin Section...
+        Commands::bucket => {
+            let list = try!(buckets(matches, bucket, client));
             Ok(())
         },
         Commands::user => {
             let list = try!(user(matches, bucket, client));
-            Ok(())
-        },
-        Commands::ver => {
-            let list = try!(get_bucket_versioning(bucket, client));
             Ok(())
         },
         _ => {
@@ -1287,24 +1288,55 @@ fn delete_object<P, D>(bucket: &str, object: &str, version: &str, operation: Opt
 
 // CEPH RGW ONLY SECTION
 // Check for is_admin. If true then it's assumed this is for Ceph's RGW and NOT AWS.
-fn stats<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
+fn buckets<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
     let is_admin = client.is_admin;
 
     if is_admin {
-        // Just Ceph RGW Admin related...
+        let command = matches.value_of("command").unwrap_or("");
+        if command.is_empty() {
+            let error = S3Error::new("Command was not specified");
+            println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
+            return Err(error);
+        }
+        let user = matches.value_of("user").unwrap_or("").to_string();
+
+        let mut path: String = "admin/".to_string();
+        let mut params = Params::new();
+
+        match command {
+            "create" => {},
+            "delete" => {},
+            "ls" => {
+                path += "metadata/bucket";
+                if !user.is_empty() {
+                    params.put("uid", &user);
+                }
+            },
+            "stats" => {
+                path += "bucket";
+                params.put("bucket", bucket);
+                params.put("stats", "True");
+                if !user.is_empty() {
+                    params.put("uid", &user);
+                }
+            },
+            e @ _ => {
+                let error = S3Error::new(format!("Unrecognized command: {}", e));
+                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
+                return Err(error);
+            }
+        }
+
         let mut request = AdminRequest::default();
         request.bucket = Some(bucket.to_string());
-        request.admin_path = Some("admin/bucket".to_string());
-        //if !uid.is_empty() {
-        //    request.uid = Some(uid.to_string());
-        //}
-        let mut params = Params::new();
-        params.put("bucket", bucket);
-        params.put("stats", "True");
+        request.admin_path = Some(path);
         request.params = params;
+        if !user.is_empty() {
+            request.uid = Some(user);
+        }
 
         match client.s3client.admin(&request) {
             Ok(output) => {

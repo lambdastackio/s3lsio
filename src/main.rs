@@ -121,6 +121,7 @@ pub enum OutputFormat {
 pub enum Commands {
     abort,
     acl,
+    bucket, // Admin for Ceph RGW only
     cp,
     get,
     head,
@@ -133,7 +134,6 @@ pub enum Commands {
     ls,
     setacl,
     setver,
-    stats, // Admin for Ceph RGW only
     user,  // Admin for Ceph RGW only
     ver,
 }
@@ -709,7 +709,7 @@ fn main() {
             ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
             ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
             ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
-            ("stats", Some(sub_matches)) => commands::commands(sub_matches, Commands::stats, &mut client),
+            ("bucket", Some(sub_matches)) => commands::commands(sub_matches, Commands::bucket, &mut client),
             ("user", Some(sub_matches)) => commands::commands(sub_matches, Commands::user, &mut client),
             ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
             (e, _) => {
