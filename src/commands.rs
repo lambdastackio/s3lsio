@@ -1422,6 +1422,11 @@ fn user<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Resu
                     params.put("uid", &user);
                 }
             },
+            "stats" => {
+                path += "user";
+                params.put("user", &user);
+                params.put("stats", "True");
+            },
             e @ _ => {
                 let error = S3Error::new(format!("Unrecognized command: {}", e));
                 println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
