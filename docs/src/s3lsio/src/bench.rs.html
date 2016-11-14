@@ -780,6 +780,11 @@
 <span id="736">736</span>
 <span id="737">737</span>
 <span id="738">738</span>
+<span id="739">739</span>
+<span id="740">740</span>
+<span id="741">741</span>
+<span id="742">742</span>
+<span id="743">743</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -996,6 +1001,7 @@
 {
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>object</span>: <span class='ident'>String</span>;
 
+    <span class='comment'>// NB: For iterations we allocate new s3client each time to simulate single user transactions...</span>
     <span class='kw'>if</span> <span class='ident'>iterations</span> <span class='op'>&gt;</span> <span class='number'>0</span> {
         <span class='kw'>for</span> <span class='ident'>i</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>iterations</span> {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>operation</span> <span class='op'>=</span> <span class='ident'>Operation</span>::<span class='ident'>default</span>();
@@ -1027,20 +1033,22 @@
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>count</span>: <span class='ident'>u64</span> <span class='op'>=</span> <span class='number'>0</span>;
         <span class='kw'>let</span> <span class='ident'>now</span> <span class='op'>=</span> <span class='ident'>Instant</span>::<span class='ident'>now</span>();
 
+        <span class='kw'>let</span> <span class='ident'>provider</span> <span class='op'>=</span> <span class='ident'>DefaultCredentialsProviderSync</span>::<span class='ident'>new</span>(<span class='prelude-val'>None</span>).<span class='ident'>unwrap</span>();
+        <span class='kw'>let</span> <span class='ident'>local_endpoint</span> <span class='op'>=</span> <span class='ident'>endpoint</span>.<span class='ident'>clone</span>();
+        <span class='kw'>let</span> <span class='ident'>s3client</span> <span class='op'>=</span> <span class='ident'>S3Client</span>::<span class='ident'>new</span>(<span class='ident'>provider</span>, <span class='ident'>local_endpoint</span>);
+
+        <span class='comment'>// NOTE: Don&#39;t need to move the GetObjectRequest to the loop like you do on put object...</span>
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>request</span> <span class='op'>=</span> <span class='ident'>GetObjectRequest</span>::<span class='ident'>default</span>();
+        <span class='ident'>request</span>.<span class='ident'>bucket</span> <span class='op'>=</span> <span class='ident'>bucket</span>.<span class='ident'>to_string</span>();
+        <span class='kw'>if</span> <span class='ident'>range</span>.<span class='ident'>is_some</span>() {
+            <span class='ident'>request</span>.<span class='ident'>range</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>range</span>.<span class='ident'>unwrap</span>().<span class='ident'>clone</span>().<span class='ident'>to_string</span>());
+        }
+
         <span class='kw'>loop</span> {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>operation</span> <span class='op'>=</span> <span class='ident'>Operation</span>::<span class='ident'>default</span>();
             <span class='ident'>object</span> <span class='op'>=</span> <span class='macro'>format</span><span class='macro'>!</span>(<span class='string'>&quot;{}{:04}&quot;</span>, <span class='ident'>base_object_name</span>, <span class='ident'>count</span><span class='op'>+</span><span class='number'>1</span>);
 
-            <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>request</span> <span class='op'>=</span> <span class='ident'>GetObjectRequest</span>::<span class='ident'>default</span>();
-            <span class='ident'>request</span>.<span class='ident'>bucket</span> <span class='op'>=</span> <span class='ident'>bucket</span>.<span class='ident'>to_string</span>();
             <span class='ident'>request</span>.<span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>object</span>.<span class='ident'>clone</span>();
-            <span class='kw'>if</span> <span class='ident'>range</span>.<span class='ident'>is_some</span>() {
-                <span class='ident'>request</span>.<span class='ident'>range</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>range</span>.<span class='ident'>unwrap</span>().<span class='ident'>clone</span>().<span class='ident'>to_string</span>());
-            }
-
-            <span class='kw'>let</span> <span class='ident'>provider</span> <span class='op'>=</span> <span class='ident'>DefaultCredentialsProviderSync</span>::<span class='ident'>new</span>(<span class='prelude-val'>None</span>).<span class='ident'>unwrap</span>();
-            <span class='kw'>let</span> <span class='ident'>local_endpoint</span> <span class='op'>=</span> <span class='ident'>endpoint</span>.<span class='ident'>clone</span>();
-            <span class='kw'>let</span> <span class='ident'>s3client</span> <span class='op'>=</span> <span class='ident'>S3Client</span>::<span class='ident'>new</span>(<span class='ident'>provider</span>, <span class='ident'>local_endpoint</span>);
 
             <span class='kw'>match</span> <span class='ident'>s3client</span>.<span class='ident'>get_object</span>(<span class='kw-2'>&amp;</span><span class='ident'>request</span>, <span class='prelude-val'>Some</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>operation</span>)) {
                 <span class='prelude-val'>Ok</span>(<span class='ident'>output</span>) <span class='op'>=&gt;</span> {},
@@ -1072,6 +1080,7 @@
 {
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>object</span>: <span class='ident'>String</span>;
 
+    <span class='comment'>// NB: For iterations we allocate new s3client each time to simulate single user transactions...</span>
     <span class='kw'>if</span> <span class='ident'>iterations</span> <span class='op'>&gt;</span> <span class='number'>0</span> {
         <span class='kw'>for</span> <span class='ident'>i</span> <span class='kw'>in</span> <span class='number'>0</span>..<span class='ident'>iterations</span> {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>operation</span> <span class='op'>=</span> <span class='ident'>Operation</span>::<span class='ident'>default</span>();
@@ -1105,6 +1114,11 @@
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>count</span>: <span class='ident'>u64</span> <span class='op'>=</span> <span class='number'>0</span>;
         <span class='kw'>let</span> <span class='ident'>now</span> <span class='op'>=</span> <span class='ident'>Instant</span>::<span class='ident'>now</span>();
 
+        <span class='kw'>let</span> <span class='ident'>provider</span> <span class='op'>=</span> <span class='ident'>DefaultCredentialsProviderSync</span>::<span class='ident'>new</span>(<span class='prelude-val'>None</span>).<span class='ident'>unwrap</span>();
+        <span class='kw'>let</span> <span class='ident'>local_endpoint</span> <span class='op'>=</span> <span class='ident'>endpoint</span>.<span class='ident'>clone</span>();
+        <span class='kw'>let</span> <span class='ident'>s3client</span> <span class='op'>=</span> <span class='ident'>S3Client</span>::<span class='ident'>new</span>(<span class='ident'>provider</span>, <span class='ident'>local_endpoint</span>);
+
+
         <span class='kw'>loop</span> {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>operation</span> <span class='op'>=</span> <span class='ident'>Operation</span>::<span class='ident'>default</span>();
             <span class='ident'>object</span> <span class='op'>=</span> <span class='macro'>format</span><span class='macro'>!</span>(<span class='string'>&quot;{}{:04}&quot;</span>, <span class='ident'>base_object_name</span>, <span class='ident'>count</span><span class='op'>+</span><span class='number'>1</span>);
@@ -1117,10 +1131,6 @@
             <span class='ident'>request</span>.<span class='ident'>bucket</span> <span class='op'>=</span> <span class='ident'>bucket</span>.<span class='ident'>to_string</span>();
             <span class='ident'>request</span>.<span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>object</span>.<span class='ident'>clone</span>();
             <span class='ident'>request</span>.<span class='ident'>body</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='kw-2'>&amp;</span><span class='ident'>buffer</span>);
-
-            <span class='kw'>let</span> <span class='ident'>provider</span> <span class='op'>=</span> <span class='ident'>DefaultCredentialsProviderSync</span>::<span class='ident'>new</span>(<span class='prelude-val'>None</span>).<span class='ident'>unwrap</span>();
-            <span class='kw'>let</span> <span class='ident'>local_endpoint</span> <span class='op'>=</span> <span class='ident'>endpoint</span>.<span class='ident'>clone</span>();
-            <span class='kw'>let</span> <span class='ident'>s3client</span> <span class='op'>=</span> <span class='ident'>S3Client</span>::<span class='ident'>new</span>(<span class='ident'>provider</span>, <span class='ident'>local_endpoint</span>);
 
             <span class='kw'>match</span> <span class='ident'>s3client</span>.<span class='ident'>put_object</span>(<span class='kw-2'>&amp;</span><span class='ident'>request</span>, <span class='prelude-val'>Some</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>operation</span>)) {
                 <span class='prelude-val'>Ok</span>(<span class='ident'>output</span>) <span class='op'>=&gt;</span> {},

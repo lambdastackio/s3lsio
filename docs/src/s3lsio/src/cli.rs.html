@@ -212,6 +212,10 @@
 <span id="168">168</span>
 <span id="169">169</span>
 <span id="170">170</span>
+<span id="171">171</span>
+<span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -239,6 +243,10 @@
       .<span class='ident'>short</span>(<span class='string'>&quot;g&quot;</span>)
       .<span class='ident'>long</span>(<span class='string'>&quot;generate-bash-completions&quot;</span>)
       .<span class='ident'>help</span>(<span class='string'>&quot;Outputs bash completions&quot;</span>))
+    .<span class='ident'>arg</span>(<span class='ident'>Arg</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;admin&quot;</span>)
+      .<span class='ident'>short</span>(<span class='string'>&quot;a&quot;</span>)
+      .<span class='ident'>long</span>(<span class='string'>&quot;admin&quot;</span>)
+      .<span class='ident'>help</span>(<span class='string'>&quot;Ceph RGW Admin&quot;</span>))
     .<span class='ident'>arg</span>(<span class='ident'>Arg</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;config&quot;</span>)
       .<span class='ident'>short</span>(<span class='string'>&quot;c&quot;</span>)
       .<span class='ident'>long</span>(<span class='string'>&quot;config&quot;</span>)
@@ -311,8 +319,8 @@
    .<span class='ident'>arg</span>(<span class='ident'>Arg</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;bench&quot;</span>)
       .<span class='ident'>short</span>(<span class='string'>&quot;b&quot;</span>)
       .<span class='ident'>long</span>(<span class='string'>&quot;bench&quot;</span>)
-      .<span class='ident'>value_name</span>(<span class='string'>&quot;Format: N:N:N:N:A (N - Number, A - Alpha)&quot;</span>)
-      .<span class='ident'>help</span>(<span class='string'>&quot;Benchmarking command: AAA:BBB:CCC:DDD:E AAA - Duration in seconds, BBB - Iterations (must be 0 if using duration), CCC - Virtual Users (threads), DDD - Hosts (only 1 for now), E - Summary or Detail (must be S or D). MUST set `-f noneall` when using this option.&quot;</span>)
+      .<span class='ident'>value_name</span>(<span class='string'>&quot;Format: N:N:N:N:N:A (N - Number, A - Alpha)&quot;</span>)
+      .<span class='ident'>help</span>(<span class='string'>&quot;Benchmarking command: AAA:BBB:CCC:DDD:EEE:F AAA - Duration in seconds, BBB - Iterations (must be 0 if using duration), CCC - Virtual Users (threads), DDD - Hosts (only 1 for now), EEE - Ramp up time (0 - Thundering Heard, anythig else spread out), F - Summary or Detail (must be S or D). MUST set `-f noneall` when using this option.&quot;</span>)
       .<span class='ident'>takes_value</span>(<span class='bool-val'>true</span>))
    .<span class='ident'>arg</span>(<span class='ident'>Arg</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;yes&quot;</span>)
       .<span class='ident'>short</span>(<span class='string'>&quot;y&quot;</span>)
@@ -377,7 +385,7 @@
       .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[ver] &#39;On or Off&#39;&quot;</span>)
       .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[bucket] &#39;Bucket name&#39;&quot;</span>))
    .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;stats&quot;</span>)
-      .<span class='ident'>about</span>(<span class='string'>&quot;Stats on Bucket or Object: s3lsio stats s3://&lt;bucket&gt; or s3lsio stats s3://&lt;bucket&gt;/&lt;object&gt;&quot;</span>)
+      .<span class='ident'>about</span>(<span class='string'>&quot;Stats on Bucket or Object: s3lsio -a stats s3://&lt;bucket&gt; or s3lsio -a stats s3://&lt;bucket&gt;/&lt;object&gt;&quot;</span>)
       .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[bucket] &#39;Bucket name or Bucket/Object name&#39;&quot;</span>))
    .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;ver&quot;</span>)
       .<span class='ident'>about</span>(<span class='string'>&quot;Shows Bucket Versioning: s3lsio ver s3://&lt;bucket&gt;&quot;</span>)

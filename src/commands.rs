@@ -32,6 +32,7 @@ use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 use aws_sdk_rust::aws::common::common::Operation;
+use aws_sdk_rust::aws::common::params::*;
 use aws_sdk_rust::aws::s3::acl::*;
 use aws_sdk_rust::aws::s3::bucket::*;
 use aws_sdk_rust::aws::s3::object::*;
@@ -161,14 +162,14 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             }
             let mut operation = Operation::default();
             let result = get_object_range(bucket, &object, offset, len, &path, Some(&mut operation), client);
-            println!("{:#?}", operation);
+            //println!("{:#?}", operation);
             Ok(())
         },
         Commands::rm => {
             let version = matches.value_of("version").unwrap_or("");
             let mut operation = Operation::default();
             let result = delete_object(bucket, &object, version, Some(&mut operation), client);
-            println!("{:#?}", operation);
+            //println!("{:#?}", operation);
             Ok(())
         },
         Commands::abort => {
@@ -262,7 +263,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             Ok(())
         },
         Commands::stats => {
-            let list = try!(stats(matches, bucket, &object, client));
+            let list = try!(bucket_stats(matches, bucket, "", client));
             Ok(())
         },
         Commands::ver => {
@@ -620,7 +621,7 @@ fn set_bucket_versioning<P, D>(matches: &ArgMatches, bucket: &str, client: &Clie
 }
 
 // Check for is_admin. If true then it's assumed this is for Ceph's RGW and NOT AWS.
-fn stats<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Client<P, D>) -> Result<(), S3Error>
+fn bucket_stats<P, D>(matches: &ArgMatches, bucket: &str, uid: &str, client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
@@ -630,11 +631,15 @@ fn stats<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Client
         // Just Ceph RGW Admin related...
         let mut request = AdminRequest::default();
         request.bucket = Some(bucket.to_string());
-        request.object = Some(object.to_string());
-        // May want to add uid later...
-        request.params = Some(format!("&bucket={}&stats=True", bucket));
+        if !uid.is_empty() {
+            request.uid = Some(uid.to_string());
+        }
+        let mut params = Params::new();
+        params.put("bucket", bucket);
+        params.put("stats", "True");
+        request.params = params;
 
-        match client.s3client.admin_stats(&request) {
+        match client.s3client.admin(&request) {
             Ok(output) => {
                 match client.output.format {
                     OutputFormat::Serialize => {
@@ -678,7 +683,7 @@ fn get_object_list<P, D>(bucket: &str, prefix: &str, list_version: u16, client: 
     request.bucket = bucket.to_string();
     if !prefix.is_empty() {
         request.prefix = Some(prefix.to_string()); //Some(format!("/{}", prefix));
-        println!("{:?}", request);
+        //println!("{:?}", request);
     }
     if list_version == 2 {
         request.version = Some(2);

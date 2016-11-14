@@ -166,7 +166,7 @@ pub fn build_cli<'a>(app: &str, home: &'a str, version: &'a str) -> App<'a, 'a> 
       .arg_from_usage("[ver] 'On or Off'")
       .arg_from_usage("[bucket] 'Bucket name'"))
    .subcommand(SubCommand::with_name("stats")
-      .about("Stats on Bucket or Object: s3lsio stats s3://<bucket> or s3lsio stats s3://<bucket>/<object>")
+      .about("Stats on Bucket or Object: s3lsio -a stats s3://<bucket> or s3lsio -a stats s3://<bucket>/<object>")
       .arg_from_usage("[bucket] 'Bucket name or Bucket/Object name'"))
    .subcommand(SubCommand::with_name("ver")
       .about("Shows Bucket Versioning: s3lsio ver s3://<bucket>")
