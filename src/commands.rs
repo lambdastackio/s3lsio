@@ -1400,11 +1400,6 @@ fn user<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Resu
             return Err(error);
         }
         let user = matches.value_of("user").unwrap_or("").to_string();
-        if user.is_empty() {
-            let error = S3Error::new("User (UID) was not specified");
-            println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-            return Err(error);
-        }
         let display_name = matches.value_of("display_name").unwrap_or("").to_string();
         let email = matches.value_of("email").unwrap_or("").to_string();
         let access_key = matches.value_of("access_key").unwrap_or("").to_string();
@@ -1421,7 +1416,12 @@ fn user<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Resu
                 path += "user";
                 params.put("uid", &user);
             },
-            "ls" => {},
+            "ls" => {
+                path += "metadata/user";
+                if !user.is_empty() {
+                    params.put("uid", &user);
+                }
+            },
             e @ _ => {
                 let error = S3Error::new(format!("Unrecognized command: {}", e));
                 println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
