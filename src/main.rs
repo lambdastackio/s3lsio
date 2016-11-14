@@ -124,6 +124,7 @@ pub enum Commands {
     cp,
     get,
     head,
+    keys,  // Admin for Ceph RGW only
     mb,
     put,
     range,
@@ -132,7 +133,8 @@ pub enum Commands {
     ls,
     setacl,
     setver,
-    stats,
+    stats, // Admin for Ceph RGW only
+    user,  // Admin for Ceph RGW only
     ver,
 }
 
@@ -708,6 +710,7 @@ fn main() {
             ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
             ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
             ("stats", Some(sub_matches)) => commands::commands(sub_matches, Commands::stats, &mut client),
+            ("user", Some(sub_matches)) => commands::commands(sub_matches, Commands::user, &mut client),
             ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
             (e, _) => {
                 println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
