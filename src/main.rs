@@ -127,7 +127,9 @@ pub enum Commands {
     head,
     keys,  // Admin for Ceph RGW only
     mb,
+    object,  // Admin for Ceph RGW only
     put,
+    quota,  // Admin for Ceph RGW only
     range,
     rb,
     rm,
@@ -710,6 +712,7 @@ fn main() {
             ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
             ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
             ("bucket", Some(sub_matches)) => commands::commands(sub_matches, Commands::bucket, &mut client),
+            ("object", Some(sub_matches)) => commands::commands(sub_matches, Commands::object, &mut client),
             ("user", Some(sub_matches)) => commands::commands(sub_matches, Commands::user, &mut client),
             ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
             (e, _) => {
