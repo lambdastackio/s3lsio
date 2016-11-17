@@ -714,6 +714,7 @@ fn main() {
             ("bucket", Some(sub_matches)) => commands::commands(sub_matches, Commands::bucket, &mut client),
             ("object", Some(sub_matches)) => commands::commands(sub_matches, Commands::object, &mut client),
             ("user", Some(sub_matches)) => commands::commands(sub_matches, Commands::user, &mut client),
+            ("quota", Some(sub_matches)) => commands::commands(sub_matches, Commands::quota, &mut client),
             ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
             (e, _) => {
                 println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);

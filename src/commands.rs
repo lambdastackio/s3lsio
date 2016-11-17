@@ -1602,17 +1602,15 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
             "." | "*" | "$" | "s3://" => { action = "get".to_string(); },
             a @ _ => { action = a.to_string(); },
         }
-        let mut path: String = "admin/".to_string();
+        let path: String = "admin/user".to_string();
         let mut params = Params::new();
         params.put("uid", &user);
 
         match command {
             "bucket" => {
-                path += "user?quota";
                 params.put("quota-type", "bucket");
             },
             "user" => {
-                path += "user?quota";
                 params.put("quota-type", "user");
             },
             a @ _ => {
@@ -1625,6 +1623,7 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
         let mut request = AdminRequest::default();
         request.bucket = Some(bucket.to_string());
         request.admin_path = Some(path);
+        request.path_options = Some("?quota&".to_string());
         request.params = params;
 
         match client.s3client.admin(&request) {
