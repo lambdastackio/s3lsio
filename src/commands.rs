@@ -1576,7 +1576,9 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
     let is_admin = client.is_admin;
 
     if is_admin {
+        let mut params = Params::new();
         let mut method = String::new();
+
         let mut user = matches.value_of("user").unwrap_or("").to_string();
         // Make into macro...
         match user.clone().trim() {
@@ -1588,15 +1590,24 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
             println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
             return Err(error);
         }
+
+        params.put("uid", &user);
+
         let mut size_str = matches.value_of("size").unwrap_or("-1").to_string();
         match size_str.clone().trim() {
             "" | "." | "*" | "$" | "s3://" => { size_str = "-1".to_string(); },
-            a @ _ => { size_str = a.to_string(); },
+            a @ _ => {
+                size_str = a.to_string();
+                params.put("max-size-kb", &size_str);
+            },
         }
         let mut objects_str = matches.value_of("objects").unwrap_or("-1").to_string();
         match objects_str.clone().trim() {
             "" | "." | "*" | "$" | "s3://" => { objects_str = "-1".to_string(); },
-            a @ _ => { objects_str = a.to_string(); },
+            a @ _ => {
+                objects_str = a.to_string();
+                params.put("max-objects", &objects_str);
+            },
         }
         let mut command = matches.value_of("command").unwrap_or("");
         match command.clone().trim() {
@@ -1615,8 +1626,6 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
         }
 
         let path: String = "admin/user".to_string();
-        let mut params = Params::new();
-        params.put("uid", &user);
 
         match command {
             "bucket" => {
