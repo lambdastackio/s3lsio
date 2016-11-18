@@ -1595,17 +1595,23 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
 
         let mut size_str = matches.value_of("size").unwrap_or("-1").to_string();
         match size_str.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => { size_str = "-1".to_string(); },
+            "" | "." | "*" | "$" | "s3://" => {},
             a @ _ => {
                 size_str = a.to_string();
+                if size_str == "0".to_string() {
+                    size_str = "-1".to_string();
+                }
                 params.put("max-size-kb", &size_str);
             },
         }
         let mut objects_str = matches.value_of("objects").unwrap_or("-1").to_string();
         match objects_str.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => { objects_str = "-1".to_string(); },
+            "" | "." | "*" | "$" | "s3://" => {},
             a @ _ => {
                 objects_str = a.to_string();
+                if objects_str == "0".to_string() {
+                    objects_str = "-1".to_string();
+                }
                 params.put("max-objects", &objects_str);
             },
         }
