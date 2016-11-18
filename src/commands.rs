@@ -1578,6 +1578,7 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
     if is_admin {
         let mut params = Params::new();
         let mut method = String::new();
+        let mut enabled = false;
 
         let mut user = matches.value_of("user").unwrap_or("").to_string();
         // Make into macro...
@@ -1593,28 +1594,6 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
 
         params.put("uid", &user);
 
-        let mut size_str = matches.value_of("size").unwrap_or("-1").to_string();
-        match size_str.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => {},
-            a @ _ => {
-                size_str = a.to_string();
-                if size_str == "0".to_string() {
-                    size_str = "-1".to_string();
-                }
-                params.put("max-size-kb", &size_str);
-            },
-        }
-        let mut objects_str = matches.value_of("objects").unwrap_or("-1").to_string();
-        match objects_str.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => {},
-            a @ _ => {
-                objects_str = a.to_string();
-                if objects_str == "0".to_string() {
-                    objects_str = "-1".to_string();
-                }
-                params.put("max-objects", &objects_str);
-            },
-        }
         let mut command = matches.value_of("command").unwrap_or("");
         match command.clone().trim() {
             "" | "." | "*" | "$" | "s3://" => { command = "bucket"; },
@@ -1629,6 +1608,43 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
                 println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
                 return Err(e);
             },
+        }
+
+        if method.clone().to_uppercase() == "PUT".to_string() {
+            if command.clone().to_string().to_lowercase() == "bucket".to_string() {
+                let mut size_str = matches.value_of("size").unwrap_or("-1").to_string();
+                match &size_str.clone().to_lowercase() as &str {
+                    "" | "." | "*" | "$" | "s3://" => {},
+                    a @ _ => {
+                        size_str = a.to_string();
+                        if size_str == "0".to_string() {
+                            size_str = "-1".to_string();
+                        } else {
+                            enabled = true;
+                        }
+                        params.put("max-size-kb", &size_str);
+                    },
+                }
+            } else {
+                let mut objects_str = matches.value_of("objects").unwrap_or("-1").to_string();
+                match &objects_str.clone().to_lowercase() as &str {
+                    "" | "." | "*" | "$" | "s3://" => {},
+                    a @ _ => {
+                        objects_str = a.to_string();
+                        if objects_str == "0".to_string() {
+                            objects_str = "-1".to_string();
+                        } else {
+                            enabled = true;
+                        }
+                        params.put("max-objects", &objects_str);
+                    },
+                }
+            }
+            if enabled {
+                params.put("enabled", "True");
+            } else {
+                params.put("enabled", "False");
+            }
         }
 
         let path: String = "admin/user".to_string();
