@@ -1578,7 +1578,6 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
     if is_admin {
         let mut params = Params::new();
         let mut method = String::new();
-        let mut enabled = false;
 
         let mut user = matches.value_of("user").unwrap_or("").to_string();
         // Make into macro...
@@ -1596,61 +1595,56 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
 
         let mut command = matches.value_of("command").unwrap_or("");
         match command.clone().trim() {
-            "user" => { command = "user"; },
-            _ => { command = "bucket"; },
+            "user" => {
+                command = "user";
+                params.put("quota-type", "user");
+            },
+            _ => {
+                command = "bucket";
+                params.put("quota-type", "bucket");
+            },
         }
-        let mut action = matches.value_of("action").unwrap_or("get");
-        match action {
+        let mut action = matches.value_of("action").unwrap_or("get").to_string().to_lowercase();
+        match &action.clone() as &str {
             "set" => { method = "PUT".to_string(); },
+            "enable" => {
+                method = "PUT".to_string();
+                params.put("enabled", "true");
+            },
+            "disable" => {
+                method = "PUT".to_string();
+                params.put("enabled", "false");
+            },
             _ => { method = "GET".to_string(); },
         }
 
-        if method.clone().to_uppercase() == "PUT".to_string() {
+        if action.clone() == "set".to_string() {
             let mut size_str = matches.value_of("size").unwrap_or("").to_string();
-            if command.clone().to_string().to_lowercase() == "bucket".to_string() {
-                match &size_str.clone().to_lowercase() as &str {
-                    "" | "." | "*" | "$" | "s3://" => {},
-                    a @ _ => {
-                        size_str = a.to_string();
-                        if size_str == "0".to_string() {
-                            size_str = "-1".to_string();
-                        } else {
-                            enabled = true;
-                        }
-                        params.put("max-size-kb", &size_str);
-                    },
-                }
-            } else {
-                match &size_str.clone().to_lowercase() as &str {
-                    "" | "." | "*" | "$" | "s3://" => {},
-                    a @ _ => {
-                        size_str = a.to_string();
-                        if size_str == "0".to_string() {
-                            size_str = "-1".to_string();
-                        } else {
-                            enabled = true;
-                        }
-                        params.put("max-objects", &size_str);
-                    },
-                }
+            match &size_str.clone().to_lowercase() as &str {
+                "" | "." | "*" | "$" | "s3://" => {},
+                a @ _ => {
+                    size_str = a.to_string();
+                    if size_str == "0".to_string() {
+                        size_str = "-1".to_string();
+                    }
+                    params.put("max-size-kb", &size_str);
+                },
             }
-            if enabled {
-                params.put("enabled", "true");
-            } else {
-                params.put("enabled", "false");
+
+            let mut object_str = matches.value_of("count").unwrap_or("").to_string();
+            match &object_str.clone().to_lowercase() as &str {
+                "" | "." | "*" | "$" | "s3://" => {},
+                a @ _ => {
+                    object_str = a.to_string();
+                    if object_str == "0".to_string() {
+                        object_str = "-1".to_string();
+                    }
+                    params.put("max-objects", &size_str);
+                },
             }
         }
 
         let path: String = "admin/user".to_string();
-
-        match command {
-            "user" => {
-                params.put("quota-type", "user");
-            },
-            _ => {
-                params.put("quota-type", "bucket");
-            },
-        }
 
         let mut request = AdminRequest::default();
         request.bucket = Some(bucket.to_string());
