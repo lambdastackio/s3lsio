@@ -1639,7 +1639,7 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
                     if object_str == "0".to_string() {
                         object_str = "-1".to_string();
                     }
-                    params.put("max-objects", &size_str);
+                    params.put("max-objects", &object_str);
                 },
             }
         }
