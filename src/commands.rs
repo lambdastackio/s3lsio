@@ -1596,23 +1596,18 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
 
         let mut command = matches.value_of("command").unwrap_or("");
         match command.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => { command = "bucket"; },
-            a @ _ => { command = a; },
+            "user" => { command = "user"; },
+            _ => { command = "bucket"; },
         }
         let mut action = matches.value_of("action").unwrap_or("get");
         match action {
-            "get" | "" | "." | "*" | "$" | "s3://" => { method = "GET".to_string(); },
             "set" => { method = "PUT".to_string(); },
-            a @ _ => {
-                let e = S3Error::new(format!("Invalid action: {} - Valid options are `get` or `set`", a));
-                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-                return Err(e);
-            },
+            _ => { method = "GET".to_string(); },
         }
 
         if method.clone().to_uppercase() == "PUT".to_string() {
+            let mut size_str = matches.value_of("size").unwrap_or("").to_string();
             if command.clone().to_string().to_lowercase() == "bucket".to_string() {
-                let mut size_str = matches.value_of("size").unwrap_or("-1").to_string();
                 match &size_str.clone().to_lowercase() as &str {
                     "" | "." | "*" | "$" | "s3://" => {},
                     a @ _ => {
@@ -1626,41 +1621,35 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
                     },
                 }
             } else {
-                let mut objects_str = matches.value_of("objects").unwrap_or("-1").to_string();
-                match &objects_str.clone().to_lowercase() as &str {
+                match &size_str.clone().to_lowercase() as &str {
                     "" | "." | "*" | "$" | "s3://" => {},
                     a @ _ => {
-                        objects_str = a.to_string();
-                        if objects_str == "0".to_string() {
-                            objects_str = "-1".to_string();
+                        size_str = a.to_string();
+                        if size_str == "0".to_string() {
+                            size_str = "-1".to_string();
                         } else {
                             enabled = true;
                         }
-                        params.put("max-objects", &objects_str);
+                        params.put("max-objects", &size_str);
                     },
                 }
             }
             if enabled {
-                params.put("enabled", "True");
+                params.put("enabled", "true");
             } else {
-                params.put("enabled", "False");
+                params.put("enabled", "false");
             }
         }
 
         let path: String = "admin/user".to_string();
 
         match command {
-            "bucket" => {
-                params.put("quota-type", "bucket");
-            },
             "user" => {
                 params.put("quota-type", "user");
             },
-            a @ _ => {
-                let e = S3Error::new(format!("Invalid command: {} - Valid options are `bucket` or `user`", a));
-                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-                return Err(e);
-            }
+            _ => {
+                params.put("quota-type", "bucket");
+            },
         }
 
         let mut request = AdminRequest::default();
