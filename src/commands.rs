@@ -1325,17 +1325,18 @@ fn buckets<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> R
 
         // Make into macro...
         match user.clone().trim() {
-            "." | "*" | "$" | "s3://" => { user = "".to_string(); },
+            "" | "." | "*" | "$" | "s3://" => { user = "".to_string(); },
             a @ _ => { user = a.to_string(); },
         }
         match command.clone().trim() {
-            "." | "*" | "$" | "s3://" => { command = ""; },
+            "" | "." | "*" | "$" | "s3://" => { command = ""; },
             a @ _ => { command = a; },
         }
 
         let mut path: String = "admin/".to_string();
         let mut params = Params::new();
         let mut error: String = "".to_string();
+        let mut path_options: Option<String> = None;
 
         match command {
             "create" => {},
@@ -1352,7 +1353,8 @@ fn buckets<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> R
                 let fix = matches.value_of("fix").unwrap_or("false").to_string().to_lowercase();
                 let check = matches.value_of("check").unwrap_or("false").to_string().to_lowercase();
 
-                path += "bucket?index";
+                path += "bucket";
+                path_options = Some("?index&".to_string());
                 params.put("bucket", bucket);
                 if !fix.is_empty() {
                     params.put("fix", &fix);
@@ -1417,6 +1419,9 @@ fn buckets<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> R
         let mut request = AdminRequest::default();
         request.bucket = Some(bucket.to_string());
         request.admin_path = Some(path);
+        if path_options.is_some() {
+            request.path_options = path_options;
+        }
         request.params = params;
         if !user.is_empty() {
             request.uid = Some(user);
@@ -1479,11 +1484,11 @@ fn objects<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Clie
     if is_admin {
         let mut command = matches.value_of("command").unwrap_or("");
         match command.clone().trim() {
-            "." | "*" | "$" | "s3://" => { command = ""; },
+            "" | "." | "*" | "$" | "s3://" => { command = ""; },
             a @ _ => { command = a; },
         }
 
-        let mut path: String = "admin/".to_string();
+        let mut path: String = "admin/bucket".to_string();
         let mut params = Params::new();
         let mut error: String = "".to_string();
 
@@ -1500,7 +1505,6 @@ fn objects<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Clie
                     println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
                     return Err(e);
                 }
-                path += "bucket?object";
                 params.put("bucket", bucket);
                 params.put("object", object);
             },
@@ -1514,6 +1518,7 @@ fn objects<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Clie
         let mut request = AdminRequest::default();
         request.bucket = Some(bucket.to_string());
         request.admin_path = Some(path);
+        request.path_options = Some("?object&".to_string());
         request.params = params;
 
         match client.s3client.admin(&request) {
@@ -1571,10 +1576,11 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
     let is_admin = client.is_admin;
 
     if is_admin {
+        let mut method = String::new();
         let mut user = matches.value_of("user").unwrap_or("").to_string();
         // Make into macro...
         match user.clone().trim() {
-            "." | "*" | "$" | "s3://" => { user = "".to_string(); },
+            "" | "." | "*" | "$" | "s3://" => { user = "".to_string(); },
             a @ _ => { user = a.to_string(); },
         }
         if user.is_empty() {
@@ -1584,24 +1590,30 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
         }
         let mut size_str = matches.value_of("size").unwrap_or("-1").to_string();
         match size_str.clone().trim() {
-            "." | "*" | "$" | "s3://" => { size_str = "-1".to_string(); },
+            "" | "." | "*" | "$" | "s3://" => { size_str = "-1".to_string(); },
             a @ _ => { size_str = a.to_string(); },
         }
         let mut objects_str = matches.value_of("objects").unwrap_or("-1").to_string();
         match objects_str.clone().trim() {
-            "." | "*" | "$" | "s3://" => { objects_str = "-1".to_string(); },
+            "" | "." | "*" | "$" | "s3://" => { objects_str = "-1".to_string(); },
             a @ _ => { objects_str = a.to_string(); },
         }
         let mut command = matches.value_of("command").unwrap_or("");
         match command.clone().trim() {
-            "." | "*" | "$" | "s3://" => { command = "bucket"; },
+            "" | "." | "*" | "$" | "s3://" => { command = "bucket"; },
             a @ _ => { command = a; },
         }
-        let mut action = matches.value_of("action").unwrap_or("get").to_string();
-        match action.clone().trim() {
-            "." | "*" | "$" | "s3://" => { action = "get".to_string(); },
-            a @ _ => { action = a.to_string(); },
+        let mut action = matches.value_of("action").unwrap_or("get");
+        match action {
+            "get" | "" | "." | "*" | "$" | "s3://" => { method = "GET".to_string(); },
+            "set" => { method = "PUT".to_string(); },
+            a @ _ => {
+                let e = S3Error::new(format!("Invalid action: {} - Valid options are `get` or `set`", a));
+                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
+                return Err(e);
+            },
         }
+
         let path: String = "admin/user".to_string();
         let mut params = Params::new();
         params.put("uid", &user);
@@ -1614,7 +1626,7 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
                 params.put("quota-type", "user");
             },
             a @ _ => {
-                let e = S3Error::new(format!("Invalid command: {}", a));
+                let e = S3Error::new(format!("Invalid command: {} - Valid options are `bucket` or `user`", a));
                 println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
                 return Err(e);
             }
@@ -1622,6 +1634,7 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
 
         let mut request = AdminRequest::default();
         request.bucket = Some(bucket.to_string());
+        request.method = Some(method);
         request.admin_path = Some(path);
         request.path_options = Some("?quota&".to_string());
         request.params = params;
