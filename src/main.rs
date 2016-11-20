@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![feature(plugin)]
-#![plugin(clippy)]
-#![allow(print_with_newline)]
-#![allow(or_fun_call)]
+//#![feature(plugin)]
+//#![plugin(clippy)]
+//#![allow(print_with_newline)]
+//#![allow(or_fun_call)]
 
 //#![allow(unused_imports)]
 #![allow(unused_variables)]
@@ -59,23 +59,16 @@ extern crate time;
 extern crate chrono;
 
 use std::io;
-use std::io::Write;
 use std::env;
 use std::path::PathBuf;
-use std::fs;
-use std::fs::File;
 use std::convert::AsRef;
 
-use clap::{Shell, ArgMatches};
+use clap::Shell;
 use url::Url;
-use rustc_serialize::json;
-//use chrono::{UTC, DateTime};
-//use pbr::{ProgressBar, MultiBar};
 
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::s3::endpoint::*;
 use aws_sdk_rust::aws::s3::s3client::S3Client;
-use aws_sdk_rust::aws::common::common::Operation;
 use aws_sdk_rust::aws::common::region::Region;
 use aws_sdk_rust::aws::common::credentials::{AwsCredentialsProvider, DefaultCredentialsProviderSync};
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;

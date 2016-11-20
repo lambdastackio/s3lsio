@@ -15,6 +15,7 @@
 #![allow(unused_imports)]
 #![allow(unused_must_use)]
 #![allow(unused_variables)]
+#![allow(unused_assignments)]
 
 use std::io;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
@@ -1525,7 +1526,7 @@ fn objects<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Clie
     let is_admin = client.is_admin;
 
     if is_admin {
-        let mut method = String::from("DELETE");
+        let method = String::from("DELETE");
 
         let mut command = matches.value_of("command").unwrap_or("");
         match command.clone().trim() {
@@ -1533,7 +1534,7 @@ fn objects<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Clie
             a @ _ => { command = a; },
         }
 
-        let mut path: String = "admin/bucket".to_string();
+        let path: String = "admin/bucket".to_string();
         let mut params = Params::new();
         let mut error: String = "".to_string();
 
@@ -1650,7 +1651,7 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
                 params.put("quota-type", "bucket");
             },
         }
-        let mut action = matches.value_of("action").unwrap_or("get").to_string().to_lowercase();
+        let action = matches.value_of("action").unwrap_or("get").to_string().to_lowercase();
         match &action.clone() as &str {
             "set" => { method = "PUT".to_string(); },
             "enable" => {
@@ -1755,7 +1756,7 @@ fn caps<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Resu
 
     if is_admin {
         let mut method = String::from("PUT");
-        let mut path: String = "admin/user".to_string();
+        let path: String = "admin/user".to_string();
         let params: Params;
 
         let sub_params = match matches.subcommand() {
@@ -2163,7 +2164,7 @@ fn usage<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
 
     if is_admin {
         let mut method = String::from("GET");
-        let mut path: String = "admin/usage".to_string();
+        let path: String = "admin/usage".to_string();
         let params: Params;
 
         let sub_params = match matches.subcommand() {
@@ -2359,7 +2360,7 @@ fn keys<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Resu
 
     if is_admin {
         let mut method = String::from("GET");
-        let mut path: String = "admin/user".to_string();
+        let path: String = "admin/user".to_string();
         let params: Params;
 
         let sub_params = match matches.subcommand() {

@@ -15,6 +15,7 @@
 #![allow(unused_imports)]
 #![allow(unused_must_use)]
 #![allow(unused_variables)]
+#![allow(unused_assignments)]
 
 use std::io;
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
@@ -405,6 +406,7 @@ pub fn benchmarking<'a, P, D>(matches: ArgMatches,
     }
 }
 
+/*
 /// Benchmarking - This benchmarking is for the server only and not the app. Thus, only the
 /// last library layer (hyper) is measured and not any local disk activity so that a more accurate
 /// measurement can be taken.
@@ -477,6 +479,7 @@ pub fn commands<'a, P, D>(matches: &ArgMatches,
 
     Ok(())
 }
+
 
 fn get_range_bench<'a, P, D>(bucket: &str,
                                  base_object_name: &str,
@@ -558,6 +561,7 @@ fn get_bench<'a, 'b, P, D>(bucket: &str,
 
     Ok(())
 }
+*/
 
 pub fn do_get_bench<'a>(bucket: &str,
                         base_object_name: &str,
@@ -720,6 +724,7 @@ pub fn do_put_bench<'a>(bucket: &str,
     Ok(())
 }
 
+/*
 fn put_bench<'a, 'b, P, D>(bucket: &str,
                            path: &str,
                            base_object_name: &str,
@@ -1097,6 +1102,7 @@ fn put_multipart_upload<P, D>(bucket: &str,
 
     Ok(())
 }
+*/
 
 // NOTE: Will need to refactor this if there are more than one host...
 fn master_benchmark(bench_request: BenchRequest,
