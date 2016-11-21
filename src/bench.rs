@@ -60,6 +60,9 @@ use OutputFormat;
 use Commands;
 use common::get_bucket;
 
+// 5MB minimum size for multipart_uploads. Only last part can be less.
+const PART_SIZE_MIN: u64 = 5242880;
+
 /// Allows you to control Benchmarking output.
 ///
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -225,6 +228,8 @@ pub struct BenchSummary {
     pub operations: Option<Vec<BenchHostInstanceSummary>>,
 }
 
+/// BenchSummary::new
+///
 impl BenchSummary {
     pub fn new(operations: Vec<BenchHostInstanceSummary>) -> BenchSummary {
         BenchSummary {
@@ -261,8 +266,10 @@ pub struct BenchRequest {
     pub rampup: u32,
     pub request_type: String,
     pub size: u64,
+    pub size_of_parts: u64,
     pub nodes: u32,
     pub virtual_buckets: bool,
+    pub keep_alive: bool,
 }
 
 /// Allows for duration tracking of operations. You should not track time of this app running but
@@ -274,6 +281,8 @@ pub struct BenchResults {
     pub summary: BenchSummary,
 }
 
+/// BenchResults::new
+///
 impl BenchResults {
     pub fn new(request: BenchRequest, summary: BenchSummary) -> BenchResults {
         BenchResults {
@@ -283,12 +292,16 @@ impl BenchResults {
     }
 }
 
-pub fn benchmarking<'a, P, D>(matches: ArgMatches,
+/// Benchmarking - Function that starts the benchmarking process with values passed in
+///
+pub fn benchmarking<'a, P, D>(matches: &ArgMatches,
                               bench: Option<&str>,
                               ep_str: Option<&str>,
                               is_bucket_virtual: bool,
+                              keep_alive: bool,
                               bench_output: BenchOutput,
-                              client: Client<P, D>)
+                              client: &Client<P, D>)
+                              -> Result<(), S3Error>
                               where P: AwsCredentialsProvider + Sync + Send,
                                     D: DispatchSignedRequest + Sync + Send,
 {
@@ -331,9 +344,11 @@ pub fn benchmarking<'a, P, D>(matches: ArgMatches,
                                              request_type: "GET".to_string(),
                                              rampup: rampup,
                                              size: 0,
+                                             size_of_parts: 0,
                                              virtual_buckets: is_bucket_virtual,
+                                             keep_alive: keep_alive,
                                              nodes: nodes};
-            let bench_host_instance_summary = host_controller(sub_matches, Commands::get, duration, nodes, iterations, virtual_users, 0, endpoint_clone);
+            let bench_host_instance_summary = host_controller(sub_matches, Commands::get, duration, nodes, iterations, keep_alive, virtual_users, 0, endpoint_clone);
             // It would then send the bench_host_instance_summary back to the master and process
             if bench_host_instance_summary.is_some() {
                 master_benchmark(bench_request, bench_output, bench_host_instance_summary.unwrap());
@@ -342,6 +357,7 @@ pub fn benchmarking<'a, P, D>(matches: ArgMatches,
         },
         ("put", Some(sub_matches)) => {
             let size: u64 = sub_matches.value_of("size").unwrap_or("4096").parse().unwrap_or(4096);
+            let size_of_parts: u64 = sub_matches.value_of("size_of_parts").unwrap_or("5242880").parse().unwrap();
             let bench_request = BenchRequest{description: "Benchmarking PUT requests...".to_string(),
                                              date_time: UTC::now().to_string(),
                                              endpoint: ep.to_string(),
@@ -352,9 +368,11 @@ pub fn benchmarking<'a, P, D>(matches: ArgMatches,
                                              request_type: "PUT".to_string(),
                                              rampup: rampup,
                                              size: size,
+                                             size_of_parts: size_of_parts,
                                              virtual_buckets: is_bucket_virtual,
+                                             keep_alive: keep_alive,
                                              nodes: nodes};
-            let bench_host_instance_summary = host_controller(sub_matches, Commands::put, duration, nodes, iterations, virtual_users, size, endpoint_clone);
+            let bench_host_instance_summary = host_controller(sub_matches, Commands::put, duration, nodes, iterations, keep_alive, virtual_users, size, endpoint_clone);
             if bench_host_instance_summary.is_some() {
                 master_benchmark(bench_request, bench_output, bench_host_instance_summary.unwrap());
             }
@@ -369,7 +387,7 @@ pub fn benchmarking<'a, P, D>(matches: ArgMatches,
             let gen_result = gen_files(bench_tmp_dir, "file", iterations, size);
             Ok(())
         }
-        ("range", Some(sub_matches)) => {
+        ("brange", Some(sub_matches)) => {
             let bench_request = BenchRequest{description: "Benchmarking Byte-Range requests...".to_string(),
                                              date_time: UTC::now().to_string(),
                                              endpoint: ep.to_string(),
@@ -380,9 +398,11 @@ pub fn benchmarking<'a, P, D>(matches: ArgMatches,
                                              request_type: "BYTE-RANGE".to_string(),
                                              rampup: rampup,
                                              size: 0,
+                                             size_of_parts: 0,
                                              virtual_buckets: is_bucket_virtual,
+                                             keep_alive: keep_alive,
                                              nodes: nodes};
-            let bench_host_instance_summary = host_controller(sub_matches, Commands::range, duration, nodes, iterations, virtual_users, 0, endpoint_clone);
+            let bench_host_instance_summary = host_controller(sub_matches, Commands::range, duration, nodes, iterations, keep_alive, virtual_users, 0, endpoint_clone);
             if bench_host_instance_summary.is_some() {
                 master_benchmark(bench_request, bench_output, bench_host_instance_summary.unwrap());
             }
@@ -390,7 +410,7 @@ pub fn benchmarking<'a, P, D>(matches: ArgMatches,
         },
         (e, _) => {
             println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
-            Err(S3Error::new("A valid benchmarking instruction is required"))
+            Err(S3Error::new("A valid benchmarking instruction is required (inner)"))
         },
     };
 
@@ -399,11 +419,7 @@ pub fn benchmarking<'a, P, D>(matches: ArgMatches,
         let result = fs::remove_dir_all(bench_tmp_dir);
     }
 
-    if let Err(e) = res {
-        println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
-        println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
-        ::std::process::exit(1);
-    }
+    Ok(())
 }
 
 /*
@@ -567,30 +583,49 @@ pub fn do_get_bench<'a>(bucket: &str,
                         base_object_name: &str,
                         duration: Duration,
                         iterations: u64,
+                        keep_alive: bool,
                         range: Option<&'a str>,
                         endpoint: Endpoint,
                         operations: &'a mut Vec<Operation>) -> Result<(), S3Error>
 {
     let mut object: String;
+    let mut provider: DefaultCredentialsProviderSync;
+    let mut local_endpoint: Endpoint;
+    let mut s3client: S3Client<_,_>;
+    let mut request: GetObjectRequest;
 
-    // NB: For iterations we allocate new s3client each time to simulate single user transactions...
     if iterations > 0 {
+        // Allocate here anyway...
+        provider = DefaultCredentialsProviderSync::new(None).unwrap();
+        local_endpoint = endpoint.clone();
+        s3client = S3Client::new(provider, local_endpoint);
+
+        request = GetObjectRequest::default();
+        request.bucket = bucket.to_string();
+        if range.is_some() {
+            request.range = Some(range.unwrap().clone().to_string());
+        }
+
         for i in 0..iterations {
             let mut operation = Operation::default();
 
             // NB: For benchmarking, the objects are synthetic and in a predictable naming format.
             object = format!("{}{:04}", base_object_name, i+1);
 
-            let mut request = GetObjectRequest::default();
-            request.bucket = bucket.to_string();
-            request.key = object.clone();
-            if range.is_some() {
-                request.range = Some(range.unwrap().clone().to_string());
-            }
+            if !keep_alive {
+                provider = DefaultCredentialsProviderSync::new(None).unwrap();
+                local_endpoint = endpoint.clone();
+                s3client = S3Client::new(provider, local_endpoint);
 
-            let provider = DefaultCredentialsProviderSync::new(None).unwrap();
-            let local_endpoint = endpoint.clone();
-            let s3client = S3Client::new(provider, local_endpoint);
+                request = GetObjectRequest::default();
+                request.bucket = bucket.to_string();
+                request.key = object.clone();
+                if range.is_some() {
+                    request.range = Some(range.unwrap().clone().to_string());
+                }
+            } else {
+                request.key = object.clone();
+            }
 
             match s3client.get_object(&request, Some(&mut operation)) {
                 Ok(output) => {},
@@ -605,12 +640,12 @@ pub fn do_get_bench<'a>(bucket: &str,
         let mut count: u64 = 0;
         let now = Instant::now();
 
-        let provider = DefaultCredentialsProviderSync::new(None).unwrap();
-        let local_endpoint = endpoint.clone();
-        let s3client = S3Client::new(provider, local_endpoint);
+        // Allocate here anyway...
+        provider = DefaultCredentialsProviderSync::new(None).unwrap();
+        local_endpoint = endpoint.clone();
+        s3client = S3Client::new(provider, local_endpoint);
 
-        // NOTE: Don't need to move the GetObjectRequest to the loop like you do on put object...
-        let mut request = GetObjectRequest::default();
+        request = GetObjectRequest::default();
         request.bucket = bucket.to_string();
         if range.is_some() {
             request.range = Some(range.unwrap().clone().to_string());
@@ -620,7 +655,20 @@ pub fn do_get_bench<'a>(bucket: &str,
             let mut operation = Operation::default();
             object = format!("{}{:04}", base_object_name, count+1);
 
-            request.key = object.clone();
+            if !keep_alive {
+                provider = DefaultCredentialsProviderSync::new(None).unwrap();
+                local_endpoint = endpoint.clone();
+                s3client = S3Client::new(provider, local_endpoint);
+
+                request = GetObjectRequest::default();
+                request.bucket = bucket.to_string();
+                request.key = object.clone();
+                if range.is_some() {
+                    request.range = Some(range.unwrap().clone().to_string());
+                }
+            } else {
+                request.key = object.clone();
+            }
 
             match s3client.get_object(&request, Some(&mut operation)) {
                 Ok(output) => {},
@@ -646,32 +694,51 @@ pub fn do_put_bench<'a>(bucket: &str,
                         base_object_name: &str,
                         duration: Duration,
                         iterations: u64,
+                        keep_alive: bool,
                         size: u64,
                         endpoint: Endpoint,
                         operations: &'a mut Vec<Operation>) -> Result<(), S3Error>
 {
-    let mut object: String;
+    let mut object: String = String::new();
+    let mut buffer: Vec<u8>;
+    let mut provider: DefaultCredentialsProviderSync;
+    let mut local_endpoint: Endpoint;
+    let mut s3client: S3Client<_,_>;
+    let mut request: PutObjectRequest;
+
+    // Synthetic buffer creation to simulate an on disk object
+    zero_fill_buffer!(buffer, size);
 
     // NB: For iterations we allocate new s3client each time to simulate single user transactions...
     if iterations > 0 {
+        // Allocate here anyway...
+        provider = DefaultCredentialsProviderSync::new(None).unwrap();
+        local_endpoint = endpoint.clone();
+        s3client = S3Client::new(provider, local_endpoint);
+
+        request = PutObjectRequest::default();
+        request.bucket = bucket.to_string();
+        request.key = object.clone();
+        request.body = Some(&buffer);
+
         for i in 0..iterations {
             let mut operation = Operation::default();
 
             // NB: For benchmarking, the objects are synthetic and in a predictable naming format.
             object = format!("{}{:04}", base_object_name, i+1);
 
-            // Synthetic buffer creation to simulate an on disk object
-            let mut buffer: Vec<u8>;
-            zero_fill_buffer!(buffer, size);
+            if !keep_alive {
+                request = PutObjectRequest::default();
+                request.bucket = bucket.to_string();
+                request.key = object.clone();
+                request.body = Some(&buffer);
 
-            let mut request = PutObjectRequest::default();
-            request.bucket = bucket.to_string();
-            request.key = object.clone();
-            request.body = Some(&buffer);
-
-            let provider = DefaultCredentialsProviderSync::new(None).unwrap();
-            let local_endpoint = endpoint.clone();
-            let s3client = S3Client::new(provider, local_endpoint);
+                provider = DefaultCredentialsProviderSync::new(None).unwrap();
+                local_endpoint = endpoint.clone();
+                s3client = S3Client::new(provider, local_endpoint);
+            } else {
+                request.key = object.clone();
+            }
 
             match s3client.put_object(&request, Some(&mut operation)) {
                 Ok(output) => {},
@@ -686,23 +753,36 @@ pub fn do_put_bench<'a>(bucket: &str,
         let mut count: u64 = 0;
         let now = Instant::now();
 
-        let provider = DefaultCredentialsProviderSync::new(None).unwrap();
-        let local_endpoint = endpoint.clone();
-        let s3client = S3Client::new(provider, local_endpoint);
+        // Allocate here anyway...
+        provider = DefaultCredentialsProviderSync::new(None).unwrap();
+        local_endpoint = endpoint.clone();
+        s3client = S3Client::new(provider, local_endpoint);
 
+        request = PutObjectRequest::default();
+        request.bucket = bucket.to_string();
+        request.key = object.clone();
+        request.body = Some(&buffer);
 
         loop {
             let mut operation = Operation::default();
             object = format!("{}{:04}", base_object_name, count+1);
 
             // Synthetic buffer creation to simulate an on disk object
-            let mut buffer: Vec<u8>;
-            zero_fill_buffer!(buffer, size);
+            //let mut buffer: Vec<u8>;
+            //zero_fill_buffer!(buffer, size);
 
-            let mut request = PutObjectRequest::default();
-            request.bucket = bucket.to_string();
-            request.key = object.clone();
-            request.body = Some(&buffer);
+            if !keep_alive {
+                request = PutObjectRequest::default();
+                request.bucket = bucket.to_string();
+                request.key = object.clone();
+                request.body = Some(&buffer);
+
+                provider = DefaultCredentialsProviderSync::new(None).unwrap();
+                local_endpoint = endpoint.clone();
+                s3client = S3Client::new(provider, local_endpoint);
+            } else {
+                request.key = object.clone();
+            }
 
             match s3client.put_object(&request, Some(&mut operation)) {
                 Ok(output) => {},
@@ -1124,6 +1204,7 @@ fn host_controller(matches: &ArgMatches,
                    duration: u64,
                    nodes: u32,
                    iterations: u64,
+                   keep_alive: bool,
                    virtual_users: u32,
                    size: u64,
                    endpoint: Endpoint) -> Option<BenchHostInstanceSummary>
@@ -1132,7 +1213,7 @@ fn host_controller(matches: &ArgMatches,
     // wait until given the go ahead which will create a thundering heard or create a ramp up
     // controller to be more real world like.
 
-    host_benchmark(matches, method, duration, nodes, iterations, virtual_users, size, endpoint)
+    host_benchmark(matches, method, duration, nodes, iterations, keep_alive, virtual_users, size, endpoint)
 }
 
 /*
@@ -1146,6 +1227,7 @@ fn host_benchmark(matches: &ArgMatches,
                   duration: u64,
                   nodes: u32,
                   iterations: u64,
+                  keep_alive: bool,
                   virtual_users: u32,
                   size: u64,
                   endpoint: Endpoint) -> Option<BenchHostInstanceSummary>
@@ -1207,14 +1289,14 @@ fn host_benchmark(matches: &ArgMatches,
 
             match method {
                 Commands::get => {
-                    let result = do_get_bench(&t_bucket, &base_object_name, duration2, iterations, None, t_endpoint, &mut operations);
+                    let result = do_get_bench(&t_bucket, &base_object_name, duration2, iterations, keep_alive, None, t_endpoint, &mut operations);
                 },
                 Commands::put => {
-                    let result = do_put_bench(&t_bucket, &base_object_name, duration2, iterations, size, t_endpoint, &mut operations);
+                    let result = do_put_bench(&t_bucket, &base_object_name, duration2, iterations, keep_alive, size, t_endpoint, &mut operations);
                 },
                 Commands::range => {
                     let range = format!("bytes={}-{}", offset, len);
-                    let result = do_get_bench(&t_bucket, &base_object_name, duration2, iterations, Some(&range), t_endpoint, &mut operations);
+                    let result = do_get_bench(&t_bucket, &base_object_name, duration2, iterations, keep_alive, Some(&range), t_endpoint, &mut operations);
                 },
                 _ => {},
             }

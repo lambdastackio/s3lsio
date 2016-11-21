@@ -176,6 +176,7 @@ pub struct Client<'a, P: 'a, D: 'a>
     pub is_time: bool,
     pub is_bench: bool,
     pub is_admin: bool,
+    pub is_compute_hash: bool,
 }
 
 fn main() {
@@ -184,6 +185,9 @@ fn main() {
     let mut is_time: bool = false;
     let mut is_bench: bool = false;
     let mut is_admin: bool = false;
+    let mut is_compute_hash: bool = false;
+    let mut is_keep_alive: bool = false;
+    let mut is_bucket_virtual: bool = true;
 
     env_logger::init().unwrap();
 
@@ -207,6 +211,16 @@ fn main() {
         ::std::process::exit(0);
     }
 
+    // If the -k or --keep-alive flag was passed. False by default.
+    if matches.is_present("keep-alive") {
+        is_keep_alive = true;
+    }
+
+    // If the -m or --compute-hash flag was passed
+    if matches.is_present("compute-hash") {
+        is_compute_hash = true;
+    }
+
     // If the -q or --quiet flag was passed then shut off all output
     if matches.is_present("quiet") {
         is_quiet = true;
@@ -222,10 +236,15 @@ fn main() {
         is_time = true;
     }
 
+    // If the -h or --bucket-virtual-host flag was passed then track operation time
+    if matches.is_present("bucket-virtual-host") {
+        is_bucket_virtual = false;
+    }
+
     // NOTE: Get parameters or config for region, signature etc
     // Safe to unwrap since a default value is passed in. If a panic occurs then the environment
     // does not support a home directory.
-    let matches_clone = matches.clone();
+    //let matches_clone = matches.clone();
 
     let config_option = matches.value_of("config").unwrap();
     let region = match matches.value_of("region").unwrap().to_string().to_lowercase().as_ref() {
@@ -255,11 +274,6 @@ fn main() {
         is_time = true;
         is_bench = true;
     }
-
-    let is_bucket_virtual = match matches.value_of("bucket_virtual_host").unwrap().to_string().to_lowercase().as_ref() {
-        "false" => false,
-        _ => true,
-    };
 
     let output_format = match matches.value_of("output-format").unwrap().to_string().to_lowercase().as_ref() {
         "csv" => OutputFormat::CSV,
@@ -345,44 +359,49 @@ fn main() {
         is_time: is_time,
         is_bench: is_bench,
         is_admin: is_admin,
+        is_compute_hash: is_compute_hash,
     };
 
-    if is_bench {
-        benchmarking(matches_clone, bench, ep_str, is_bucket_virtual, bench_output, client);
-    } else {
-        // Check which subcomamnd the user wants to run...
-        let res = match matches.subcommand() {
-            ("abort", Some(sub_matches)) => commands::commands(sub_matches, Commands::abort, &mut client),
-            ("acl", Some(sub_matches)) => commands::commands(sub_matches, Commands::acl, &mut client),
-            ("get", Some(sub_matches)) => commands::commands(sub_matches, Commands::get, &mut client),
-            ("cp", Some(sub_matches)) => commands::commands(sub_matches, Commands::cp, &mut client),
-            ("head", Some(sub_matches)) => commands::commands(sub_matches, Commands::head, &mut client),
-            ("ls", Some(sub_matches)) => commands::commands(sub_matches, Commands::ls, &mut client),
-            ("mb", Some(sub_matches)) => commands::commands(sub_matches, Commands::mb, &mut client),
-            ("put", Some(sub_matches)) => commands::commands(sub_matches, Commands::put, &mut client),
-            ("range", Some(sub_matches)) => commands::commands(sub_matches, Commands::range, &mut client),
-            ("rb", Some(sub_matches)) => commands::commands(sub_matches, Commands::rb, &mut client),
-            ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
-            ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
-            ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
-            ("bucket", Some(sub_matches)) => commands::commands(sub_matches, Commands::bucket, &mut client),
-            ("cap", Some(sub_matches)) => commands::commands(sub_matches, Commands::cap, &mut client),
-            ("keys", Some(sub_matches)) => commands::commands(sub_matches, Commands::keys, &mut client),
-            ("object", Some(sub_matches)) => commands::commands(sub_matches, Commands::object, &mut client),
-            ("user", Some(sub_matches)) => commands::commands(sub_matches, Commands::user, &mut client),
-            ("usage", Some(sub_matches)) => commands::commands(sub_matches, Commands::usage, &mut client),
-            ("quota", Some(sub_matches)) => commands::commands(sub_matches, Commands::quota, &mut client),
-            ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
-            (e, _) => {
-                println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
-                Err(S3Error::new("A valid instruction is required"))
-            },
-        };
+    // Check which subcomamnd the user wants to run...
+    let res = match matches.subcommand() {
+        ("abort", Some(sub_matches)) => commands::commands(sub_matches, Commands::abort, &mut client),
+        ("acl", Some(sub_matches)) => commands::commands(sub_matches, Commands::acl, &mut client),
+        ("bench", Some(sub_matches)) => {
+            // If true then one connection per thread will created. If graphed, you would see a steady line
+            // for number of connections. If false then a connection will be created and torn down on
+            // every iteration which would graph to look like a lot of spikes. This is useful for
+            // benchmarking/testing failovers and testing server load since most server CPUs go up
+            // with new TCP connections.
+            benchmarking(sub_matches, bench, ep_str, is_bucket_virtual, is_keep_alive, bench_output, &client)
+        },
+        ("get", Some(sub_matches)) => commands::commands(sub_matches, Commands::get, &mut client),
+        ("cp", Some(sub_matches)) => commands::commands(sub_matches, Commands::cp, &mut client),
+        ("head", Some(sub_matches)) => commands::commands(sub_matches, Commands::head, &mut client),
+        ("ls", Some(sub_matches)) => commands::commands(sub_matches, Commands::ls, &mut client),
+        ("mb", Some(sub_matches)) => commands::commands(sub_matches, Commands::mb, &mut client),
+        ("put", Some(sub_matches)) => commands::commands(sub_matches, Commands::put, &mut client),
+        ("range", Some(sub_matches)) => commands::commands(sub_matches, Commands::range, &mut client),
+        ("rb", Some(sub_matches)) => commands::commands(sub_matches, Commands::rb, &mut client),
+        ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
+        ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
+        ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
+        ("bucket", Some(sub_matches)) => commands::commands(sub_matches, Commands::bucket, &mut client),
+        ("cap", Some(sub_matches)) => commands::commands(sub_matches, Commands::cap, &mut client),
+        ("keys", Some(sub_matches)) => commands::commands(sub_matches, Commands::keys, &mut client),
+        ("object", Some(sub_matches)) => commands::commands(sub_matches, Commands::object, &mut client),
+        ("user", Some(sub_matches)) => commands::commands(sub_matches, Commands::user, &mut client),
+        ("usage", Some(sub_matches)) => commands::commands(sub_matches, Commands::usage, &mut client),
+        ("quota", Some(sub_matches)) => commands::commands(sub_matches, Commands::quota, &mut client),
+        ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
+        (e, _) => {
+            println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
+            Err(S3Error::new("A valid instruction is required"))
+        },
+    };
 
-        if let Err(e) = res {
-            println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
-            println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
-            ::std::process::exit(1);
-        }
+    if let Err(e) = res {
+        println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
+        println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
+        ::std::process::exit(1);
     }
 }

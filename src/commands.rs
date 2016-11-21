@@ -386,14 +386,12 @@ fn cmd_put<P, D>(bucket: &str, object: &str, path: &str, part_size: u64, client:
                 _ => {},
             }
         } else {
-            let compute_hash: bool = false; // Change this to an option via the config
-            let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
+            let result = put_multipart_upload(bucket, &object, path, part_size, client);
         }
     } else if part_size < PART_SIZE_MIN {
         let result = put_object(bucket, &object, path, None, client);
     } else {
-        let compute_hash: bool = false; // Change this to an option via the config
-        let result = put_multipart_upload(bucket, &object, path, part_size, compute_hash, client);
+        let result = put_multipart_upload(bucket, &object, path, part_size, client);
     }
 
     Ok(())
@@ -1010,7 +1008,11 @@ fn get_object_acl<P, D>(bucket: &str, object: &str, client: &Client<P, D>) -> Re
 }
 
 // Limited in file size. Max is 5GB but should use Multipart upload for larger than 15MB.
-fn put_object<P, D>(bucket: &str, key: &str, object: &str, operation: Option<&mut Operation>, client: &Client<P, D>)
+fn put_object<P, D>(bucket: &str,
+                    key: &str,
+                    object: &str,
+                    operation: Option<&mut Operation>,
+                    client: &Client<P, D>)
                     -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
@@ -1039,6 +1041,12 @@ fn put_object<P, D>(bucket: &str, key: &str, object: &str, operation: Option<&mu
     request.bucket = bucket.to_string();
     request.key = correct_key;
     request.body = Some(&buffer);
+
+    // Compute hash - Hash is slow
+    if client.is_compute_hash {
+        let hash = md5::compute(request.body.unwrap()).to_base64(STANDARD);
+        request.content_md5 = Some(hash);
+    }
 
     match client.s3client.put_object(&request, operation) {
         Ok(output) => {
@@ -1123,7 +1131,10 @@ fn abort_multipart_upload<P, D>(bucket: &str, object: &str, id: &str, client: &C
 ///
 /// You can also apply a bucket policy to automatically abort any uploads that have not completed
 /// after so many days.
-fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: u64, compute_hash: bool,
+fn put_multipart_upload<P, D>(bucket: &str,
+                              key: &str,
+                              object: &str,
+                              part_size: u64,
                               client: &Client<P, D>)
                               -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
@@ -1178,9 +1189,9 @@ fn put_multipart_upload<P, D>(bucket: &str, key: &str, object: &str, part_size: 
 
     request.body = Some(&part_buffer);
     request.part_number = 1;
-    // Compute hash - Hash is slow
 
-    if compute_hash {
+    // Compute hash - Hash is slow
+    if client.is_compute_hash {
         let hash = md5::compute(request.body.unwrap()).to_base64(STANDARD);
         request.content_md5 = Some(hash);
     }
@@ -1652,7 +1663,7 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
             },
         }
         let action = matches.value_of("action").unwrap_or("get").to_string().to_lowercase();
-        match &action.clone() as &str {
+        match action.clone().as_ref() {
             "set" => { method = "PUT".to_string(); },
             "enable" => {
                 method = "PUT".to_string();
@@ -1667,7 +1678,8 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
 
         if action.clone() == "set".to_string() {
             let mut size_str = matches.value_of("size").unwrap_or("").to_string();
-            match &size_str.clone().to_lowercase() as &str {
+            //match &size_str.clone().to_lowercase() as &str {
+            match size_str.clone().to_lowercase().as_ref() {
                 "" | "." | "*" | "$" | "s3://" => {},
                 a @ _ => {
                     size_str = a.to_string();
@@ -1679,7 +1691,8 @@ fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Res
             }
 
             let mut object_str = matches.value_of("count").unwrap_or("").to_string();
-            match &object_str.clone().to_lowercase() as &str {
+            //match &object_str.clone().to_lowercase() as &str {
+            match object_str.clone().to_lowercase().as_ref() {
                 "" | "." | "*" | "$" | "s3://" => {},
                 a @ _ => {
                     object_str = a.to_string();
