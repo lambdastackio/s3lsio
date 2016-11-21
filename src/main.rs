@@ -46,9 +46,6 @@ extern crate aws_sdk_rust;
 extern crate rustc_serialize;
 extern crate term;
 extern crate url;
-extern crate uuid;
-#[macro_use]
-extern crate log;
 extern crate env_logger;
 #[macro_use]
 extern crate clap;
@@ -82,6 +79,7 @@ mod cli;
 mod config;
 mod commands;
 mod bench;
+mod ceph_admin;
 
 static DEFAULT_USER_AGENT: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
@@ -107,25 +105,18 @@ pub enum OutputFormat {
 pub enum Commands {
     abort,
     acl,
-    bucket, // Admin for Ceph RGW only
-    cap, // Admin for Ceph RGW only
+    admin,  // Admin for Ceph RGW only
     cp,
     get,
     head,
-    keys,  // Admin for Ceph RGW only
     mb,
-    object,  // Admin for Ceph RGW only
     put,
-    quota,  // Admin for Ceph RGW only
     range,
     rb,
     rm,
     ls,
-    setacl,
-    setver,
-    user,  // Admin for Ceph RGW only
-    usage,  // Admin for Ceph RGW only
-    usage_trim,  // Admin for Ceph RGW only
+    //setacl,
+    //setver,
     ver,
 }
 
@@ -175,7 +166,7 @@ pub struct Client<'a, P: 'a, D: 'a>
     pub is_quiet: bool,
     pub is_time: bool,
     pub is_bench: bool,
-    pub is_admin: bool,
+    //pub is_admin: bool,
     pub is_compute_hash: bool,
 }
 
@@ -184,7 +175,7 @@ fn main() {
     let mut is_quiet: bool = false;
     let mut is_time: bool = false;
     let mut is_bench: bool = false;
-    let mut is_admin: bool = false;
+    //let mut is_admin: bool = false;
     let mut is_compute_hash: bool = false;
     let mut is_keep_alive: bool = false;
     let mut is_bucket_virtual: bool = true;
@@ -227,9 +218,9 @@ fn main() {
     }
 
     // If the -a or --admin flag was passed then allow Ceph RGW Admin access (provided keys have rights)
-    if matches.is_present("admin") {
-        is_admin = true;
-    }
+    //if matches.is_present("admin") {
+    //    is_admin = true;
+    //}
 
     // If the -t or --time flag was passed then track operation time
     if matches.is_present("time") {
@@ -332,11 +323,7 @@ fn main() {
     let provider = DefaultCredentialsProviderSync::new(None).unwrap();
 
     let endpoint = Endpoint::new(region,
-                                 if sign == "v2" {
-                                     Signature::V2
-                                 } else {
-                                     Signature::V4
-                                 },
+                                 if sign == "v2" {Signature::V2} else {Signature::V4},
                                  config.clone().endpoint,
                                  config.clone().proxy,
                                  Some(DEFAULT_USER_AGENT.to_string()),
@@ -358,7 +345,7 @@ fn main() {
         is_quiet: is_quiet,
         is_time: is_time,
         is_bench: is_bench,
-        is_admin: is_admin,
+        //is_admin: is_admin,
         is_compute_hash: is_compute_hash,
     };
 
@@ -366,6 +353,7 @@ fn main() {
     let res = match matches.subcommand() {
         ("abort", Some(sub_matches)) => commands::commands(sub_matches, Commands::abort, &mut client),
         ("acl", Some(sub_matches)) => commands::commands(sub_matches, Commands::acl, &mut client),
+        ("admin", Some(sub_matches)) => commands::commands(sub_matches, Commands::admin, &mut client),
         ("bench", Some(sub_matches)) => {
             // If true then one connection per thread will created. If graphed, you would see a steady line
             // for number of connections. If false then a connection will be created and torn down on
@@ -383,24 +371,17 @@ fn main() {
         ("range", Some(sub_matches)) => commands::commands(sub_matches, Commands::range, &mut client),
         ("rb", Some(sub_matches)) => commands::commands(sub_matches, Commands::rb, &mut client),
         ("rm", Some(sub_matches)) => commands::commands(sub_matches, Commands::rm, &mut client),
-        ("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
-        ("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
-        ("bucket", Some(sub_matches)) => commands::commands(sub_matches, Commands::bucket, &mut client),
-        ("cap", Some(sub_matches)) => commands::commands(sub_matches, Commands::cap, &mut client),
-        ("keys", Some(sub_matches)) => commands::commands(sub_matches, Commands::keys, &mut client),
-        ("object", Some(sub_matches)) => commands::commands(sub_matches, Commands::object, &mut client),
-        ("user", Some(sub_matches)) => commands::commands(sub_matches, Commands::user, &mut client),
-        ("usage", Some(sub_matches)) => commands::commands(sub_matches, Commands::usage, &mut client),
-        ("quota", Some(sub_matches)) => commands::commands(sub_matches, Commands::quota, &mut client),
+        //("setacl", Some(sub_matches)) => commands::commands(sub_matches, Commands::setacl, &mut client),
+        //("setver", Some(sub_matches)) => commands::commands(sub_matches, Commands::setver, &mut client),
         ("ver", Some(sub_matches)) => commands::commands(sub_matches, Commands::ver, &mut client),
         (e, _) => {
-            println_color_quiet!(client.is_quiet, term::color::RED, "{}", e);
-            Err(S3Error::new("A valid instruction is required"))
+            let error = format!("Command {} not recognized", e);
+            println_color_quiet!(client.is_quiet, term::color::RED, "{}", error);
+            Err(S3Error::new(error))
         },
     };
 
     if let Err(e) = res {
-        println_color_quiet!(client.is_quiet, term::color::RED, "An error occured: {}", e);
         println_color_quiet!(client.is_quiet, term::color::RED, "{}", matches.usage());
         ::std::process::exit(1);
     }

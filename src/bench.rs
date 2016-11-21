@@ -34,18 +34,15 @@ use md5;
 use term;
 use rustc_serialize::json;
 use rustc_serialize::base64::{STANDARD, ToBase64};
-
 use chrono::{UTC, DateTime};
-
 use clap::ArgMatches;
+use pbr::ProgressBar;
+
 use aws_sdk_rust::aws::errors::s3::S3Error;
-//use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
 use aws_sdk_rust::aws::s3::s3client::S3Client;
 use aws_sdk_rust::aws::s3::endpoint::*;
-
 use aws_sdk_rust::aws::common::credentials::{AwsCredentialsProvider, DefaultCredentialsProviderSync};
 use aws_sdk_rust::aws::common::region::Region;
-
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
 use aws_sdk_rust::aws::common::common::Operation;
 use aws_sdk_rust::aws::s3::acl::*;
@@ -61,7 +58,7 @@ use Commands;
 use common::get_bucket;
 
 // 5MB minimum size for multipart_uploads. Only last part can be less.
-const PART_SIZE_MIN: u64 = 5242880;
+// const PART_SIZE_MIN: u64 = 5242880;
 
 /// Allows you to control Benchmarking output.
 ///
@@ -387,7 +384,7 @@ pub fn benchmarking<'a, P, D>(matches: &ArgMatches,
             let gen_result = gen_files(bench_tmp_dir, "file", iterations, size);
             Ok(())
         }
-        ("brange", Some(sub_matches)) => {
+        ("range", Some(sub_matches)) => {
             let bench_request = BenchRequest{description: "Benchmarking Byte-Range requests...".to_string(),
                                              date_time: UTC::now().to_string(),
                                              endpoint: ep.to_string(),
@@ -421,163 +418,6 @@ pub fn benchmarking<'a, P, D>(matches: &ArgMatches,
 
     Ok(())
 }
-
-/*
-/// Benchmarking - This benchmarking is for the server only and not the app. Thus, only the
-/// last library layer (hyper) is measured and not any local disk activity so that a more accurate
-/// measurement can be taken.
-///
-/// Benchmarks do not write the data to disk after GETs like a normal operation does. It does
-/// however create synthetic data in a temporary directory that is specified.
-///
-pub fn commands<'a, P, D>(matches: &ArgMatches,
-                              cmd: Commands,
-                              duration: Duration,
-                              iterations: u64,
-                              virtual_users: u32,
-                              len: u64,
-                              base_object_name: &str,
-                              operations: &'a mut Vec<Operation>,
-                              client: &Client<P, D>) -> Result<(), S3Error>
-                              where P: AwsCredentialsProvider + Sync + Send,
-                                    D: DispatchSignedRequest + Sync + Send,
-{
-    let mut bucket: &str = "";
-    //let mut object: String = "".to_string();
-    // Make sure the s3 schema prefix is present
-    let (scheme, tmp_bucket) = matches.value_of("bucket").unwrap_or("s3:// ").split_at(5);
-
-    if tmp_bucket.contains('/') {
-        let components: Vec<&str> = tmp_bucket.split('/').collect();
-        let mut first: bool = true;
-        //let mut object_first: bool = true;
-
-        for part in components {
-            if first {
-                bucket = part;
-                break;
-            } //else {
-            //    if !object_first {
-            //        object += "/";
-            //    }
-            //    object_first = false;
-            //    object += part;
-            //}
-            first = false;
-        }
-    } else {
-        bucket = tmp_bucket.trim();
-    }
-
-    // NOTE: Change the User-Agent to mean something in the logs
-    // S3lsio Benchmarking : <IP Address> : <User ???? - not sure if we want this>
-    // Separate each segment with : so that the logs can be easily grepped and awked etc.
-
-    match cmd {
-        Commands::get => {
-            let result = get_bench(bucket, base_object_name, &duration, iterations, operations, client);
-        },
-        Commands::put => {
-            let path = matches.value_of("path").unwrap_or("");
-            let result = put_bench(bucket, path, base_object_name, &duration, iterations, len, operations, client);
-        },
-        Commands::range => {
-            let offset: u64 = matches.value_of("offset").unwrap_or("0").parse().unwrap_or(0);
-            let len: u64 = matches.value_of("len").unwrap_or("0").parse().unwrap_or(0);
-            if len == 0 {
-                println_color_quiet!(client.is_quiet, client.error.color, "Error Byte-Range request: Len must be > 0");
-                return Err(S3Error::new("Error Byte-Range request: Len must be > 0"));
-            }
-            let result = get_range_bench(bucket, base_object_name, duration, iterations, offset, len, operations, client);
-        },
-        _ => {}
-    }
-
-    Ok(())
-}
-
-
-fn get_range_bench<'a, P, D>(bucket: &str,
-                                 base_object_name: &str,
-                                 duration: Duration,
-                                 iterations: u64,
-                                 offset: u64,
-                                 len: u64,
-                                 operations: &'a mut Vec<Operation>,
-                                 client: &Client<P, D>) -> Result<(), S3Error>
-                                 where P: AwsCredentialsProvider,
-                                       D: DispatchSignedRequest,
-{
-    let mut object: String;
-
-    if iterations > 0 {
-        for i in 0..iterations {
-            let mut operation: Operation;
-            operation = Operation::default();
-            object = format!("{}{:04}", base_object_name, i+1);
-            let result = get_object_range(bucket, &object, offset, len, Some(&mut operation), client);
-            operations.push(operation);
-        }
-    } else if duration.as_secs() > 0 {
-        let mut count: u64 = 0;
-        let now = Instant::now();
-
-        loop {
-            let mut operation: Operation;
-            operation = Operation::default();
-            object = format!("{}{:04}", base_object_name, count+1);
-            let result = get_object_range(bucket, &object, offset, len, Some(&mut operation), client);
-            operations.push(operation);
-            //if now.elapsed() >= *duration {
-            if now.elapsed() >= duration {
-                break;
-            }
-            count += 1;
-        }
-    }
-
-    Ok(())
-}
-
-fn get_bench<'a, 'b, P, D>(bucket: &str,
-                           base_object_name: &str,
-                           duration: &'b Duration,
-                           iterations: u64,
-                           operations: &'a mut Vec<Operation>,
-                           client: &Client<P, D>) -> Result<(), S3Error>
-                           where P: AwsCredentialsProvider,
-                                 D: DispatchSignedRequest,
-{
-    let mut object: String;
-
-    if iterations > 0 {
-        for i in 0..iterations {
-            let mut operation: Operation;
-            operation = Operation::default();
-            object = format!("{}{:04}", base_object_name, i+1);
-            let result = get_object(bucket, &object, Some(&mut operation), client);
-            operations.push(operation);
-        }
-    } else if duration.as_secs() > 0 {
-        let mut count: u64 = 0;
-        let now = Instant::now();
-
-        loop {
-            let mut operation: Operation;
-            operation = Operation::default();
-            object = format!("{}{:04}", base_object_name, count+1);
-            let result = get_object(bucket, &object, Some(&mut operation), client);
-            operations.push(operation);
-            if now.elapsed() >= *duration {
-                break;
-            }
-            count += 1;
-        }
-    }
-
-    Ok(())
-}
-*/
 
 pub fn do_get_bench<'a>(bucket: &str,
                         base_object_name: &str,
@@ -1269,7 +1109,10 @@ fn host_benchmark(matches: &ArgMatches,
         }
     }
 
-    //let mut pbb = ProgressBar::new(100);
+    // Creating threads and processing and then destroying threads so 2 x virtual_users
+    let mut pbb = ProgressBar::new((virtual_users * 2) as u64);
+    pbb.show_time_left = true;
+    pbb.message("Benchmarking started ");
 
     for i in 0..virtual_users {
         let t_arc = arc.clone();
@@ -1278,7 +1121,7 @@ fn host_benchmark(matches: &ArgMatches,
         let t_bucket = bucket.clone();
         let t_endpoint = endpoint.clone();
 
-        //pbb.inc();
+        pbb.inc();
 
         // Spawn the threads which represent virtual users
         let handle = thread::spawn(move || {
@@ -1323,6 +1166,7 @@ fn host_benchmark(matches: &ArgMatches,
     // Wait on above threads to complete before going on...
     for handle in handles {
         handle.join().unwrap();
+        pbb.inc();
     }
 
     // NOTE: Get the data from Mutex and clone it to create a "new" ownership that can be added
@@ -1380,7 +1224,8 @@ fn host_benchmark(matches: &ArgMatches,
     // Pass the bench_host_instance_summary of each host back to the master/primary
     // and add them to bench_host_instance_operations
 
-    //pbb.finish();
+    pbb.finish_println("Benchmarking complete");
+    println!(" ");
 
     Some(bench_host_instance_summary)
 }

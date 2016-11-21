@@ -42,6 +42,9 @@ use aws_sdk_rust::aws::s3::admin::*;
 // Use this for signing the admin feature for Ceph RGW
 use aws_sdk_rust::aws::common::signature::*;
 
+use common::*;
+use ceph_admin::admin;
+
 use Client;
 use Output;
 use OutputFormat;
@@ -55,50 +58,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
-    let mut bucket: &str = "";
-    let mut object: String = "".to_string();
-    let mut last: &str = "";
-    // Make sure the s3 schema prefix is present
-    //let (scheme, tmp_bucket) = matches.value_of("bucket").unwrap_or("s3:// ").split_at(5);
-    match matches.value_of("bucket") {
-        Some(buck) => {
-            let mut scheme: &str = "";
-            let mut tmp_bucket: &str = "";
-
-            if buck.contains("s3://") {
-                scheme = "s3://";
-                tmp_bucket = &buck[5..];
-            } else {
-                tmp_bucket = buck.clone();
-            }
-            if tmp_bucket.contains('/') {
-                let components: Vec<&str> = tmp_bucket.split('/').collect();
-                let mut first: bool = true;
-                let mut object_first: bool = true;
-
-                for part in components {
-                    if first {
-                        bucket = part;
-                    } else {
-                        if !object_first {
-                            object += "/";
-                        }
-                        object_first = false;
-                        object += part;
-                        last = part;
-                    }
-                    first = false;
-                }
-            } else {
-                match tmp_bucket.trim() {
-                    "." | "*" | "$" | "s3://" => {},
-                    a @ _ => { bucket = a; },
-                }
-                object = "".to_string();
-            }
-        },
-        None => {},
-    }
+    let (mut bucket, mut object, last) = find_bucket_object_last(&matches);
 
     match cmd {
         Commands::get => {
@@ -195,29 +155,7 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             Ok(())
         },
         Commands::acl => {
-            if object.is_empty() {
-                let acl = try!(get_bucket_acl(bucket, client));
-                match client.output.format {
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", acl);
-                    },
-                    OutputFormat::JSON => {
-                        println_color_quiet!(client.is_quiet,
-                                             client.output.color,
-                                             "{}",
-                                             json::encode(&acl).unwrap_or("{}".to_string()));
-                    },
-                    OutputFormat::PrettyJSON => {
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&acl));
-                    },
-                    OutputFormat::None | OutputFormat::NoneAll => {},
-                    e => println_color_quiet!(client.is_quiet, client.error.color, "Error: Format - {:#?}", e),
-                }
-            } else {
-                let acl = try!(get_object_acl(bucket, &object, client));
-            }
-            Ok(())
+            acl(matches, &client)
         },
         Commands::head => {
             if object.is_empty() {
@@ -268,53 +206,15 @@ pub fn commands<P, D>(matches: &ArgMatches, cmd: Commands, client: &mut Client<P
             }
         },
         Commands::rb => {
-            let result = delete_bucket(bucket, client);
-            Ok(())
-        },
-        Commands::setacl => {
-            let result = try!(set_bucket_acl(matches, bucket, client));
-            Ok(())
-        },
-        Commands::setver => {
-            let list = try!(set_bucket_versioning(matches, bucket, client));
-            Ok(())
+            delete_bucket(bucket, client)
         },
         Commands::ver => {
-            let list = try!(get_bucket_versioning(bucket, client));
-            Ok(())
+            ver(matches, client)
         },
         // Ceph RGW Admin Section...
-        Commands::bucket => {
-            let list = try!(buckets(matches, bucket, client));
-            Ok(())
+        Commands::admin => {
+            admin(matches, bucket, object, &client)
         },
-        Commands::cap => {
-            let list = try!(caps(matches, bucket, client));
-            Ok(())
-        },
-        Commands::keys => {
-            let list = try!(keys(matches, bucket, client));
-            Ok(())
-        },
-        Commands::object => {
-            let list = try!(objects(matches, bucket, &object, client));
-            Ok(())
-        },
-        Commands::quota => {
-            let list = try!(quota(matches, bucket, client));
-            Ok(())
-        },
-        Commands::user => {
-            let list = try!(user(matches, bucket, client));
-            Ok(())
-        },
-        Commands::usage => {
-            let list = try!(usage(matches, bucket, client));
-            Ok(())
-        },
-        _ => {
-            Ok(())
-        }
     };
 
     Ok(())
@@ -355,6 +255,7 @@ fn cmd_get<P, D>(bucket: &str, object: &str, path: &str, client: &Client<P, D>) 
 
     Ok(())
 }
+
 fn cmd_put<P, D>(bucket: &str, object: &str, path: &str, part_size: u64, client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
@@ -397,10 +298,68 @@ fn cmd_put<P, D>(bucket: &str, object: &str, path: &str, part_size: u64, client:
     Ok(())
 }
 
+fn ver<P, D>(matches: &ArgMatches,
+             client: &Client<P, D>)
+             -> Result<(), S3Error>
+             where P: AwsCredentialsProvider,
+                   D: DispatchSignedRequest,
+{
+    match matches.subcommand() {
+        ("set", Some(matches)) => {
+            let (bucket, object, last) = find_bucket_object_last(&matches);
+            set_bucket_versioning(matches, bucket, client)
+        },
+        // Fall through to `get`
+        (_, Some(matches)) => {
+            let (bucket, object, last) = find_bucket_object_last(&matches);
+            get_bucket_versioning(bucket, client)
+        },
+        (_, None) => {
+            let error = format!("Invalid ver command");
+            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+            return Err(S3Error::new(error));
+        }
+    }
+}
+
+fn acl<P, D>(matches: &ArgMatches,
+             client: &Client<P, D>)
+             -> Result<(), S3Error>
+             where P: AwsCredentialsProvider,
+                   D: DispatchSignedRequest,
+{
+    match matches.subcommand() {
+        ("set", Some(matches)) => {
+            let (bucket, object, last) = find_bucket_object_last(&matches);
+            set_bucket_acl(matches, bucket, client)
+        },
+        // Fall through to `get`
+        (_, Some(matches)) => {
+            let (bucket, object, last) = find_bucket_object_last(&matches);
+            if object.is_empty() {
+                get_bucket_acl(bucket, client)
+            } else {
+                get_object_acl(bucket, &object, client)
+            }
+        },
+        (_, None) => {
+            let error = format!("Invalid acl command");
+            println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+            return Err(S3Error::new(error));
+        },
+    }
+}
+
 fn create_bucket<P, D>(bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = CreateBucketRequest::default();
     request.bucket = bucket.to_string();
 
@@ -423,6 +382,12 @@ fn delete_bucket<P, D>(bucket: &str, client: &Client<P, D>) -> Result<(), S3Erro
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let request = DeleteBucketRequest { bucket: bucket.to_string() };
 
     match client.s3client.delete_bucket(&request) {
@@ -445,6 +410,12 @@ fn get_bucket_head<P, D>(bucket: &str, client: &Client<P, D>) -> Result<(), S3Er
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let request = HeadBucketRequest { bucket: bucket.to_string() };
 
     match client.s3client.head_bucket(&request) {
@@ -467,6 +438,12 @@ fn get_bucket_versioning<P, D>(bucket: &str, client: &Client<P, D>) -> Result<()
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let request = GetBucketVersioningRequest { bucket: bucket.to_string() };
 
     match client.s3client.get_bucket_versioning(&request) {
@@ -504,15 +481,47 @@ fn get_bucket_versioning<P, D>(bucket: &str, client: &Client<P, D>) -> Result<()
     }
 }
 
-fn get_bucket_acl<P, D>(bucket: &str, client: &Client<P, D>) -> Result<AccessControlPolicy, S3Error>
+// AccessControlPolicy
+fn get_bucket_acl<P, D>(bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = GetBucketAclRequest::default();
     request.bucket = bucket.to_string();
 
     match client.s3client.get_bucket_acl(&request) {
-        Ok(acl) => Ok(acl),
+        Ok(output) => {
+            match client.output.format {
+                OutputFormat::Serialize => {
+                    // Could have already been serialized before being passed to this function.
+                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
+                },
+                OutputFormat::Plain => {
+                    // Could have already been serialized before being passed to this function.
+                    println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output);
+                },
+                OutputFormat::JSON => {
+                    println_color_quiet!(client.is_quiet,
+                                         client.output.color,
+                                         "{}",
+                                         json::encode(&output).unwrap_or("{}".to_string()));
+                },
+                OutputFormat::PrettyJSON => {
+                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
+                },
+                OutputFormat::Simple => {
+                    println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output));
+                },
+                _ => {},
+            }
+            Ok(())
+        },
         Err(e) => {
             let error = format!("{:#?}", e);
             println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
@@ -568,6 +577,11 @@ fn set_bucket_acl<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
 
     let acl: CannedAcl;
     let cli_acl = matches.value_of("acl").unwrap_or("").to_string().to_lowercase();
@@ -633,6 +647,12 @@ fn set_bucket_versioning<P, D>(matches: &ArgMatches, bucket: &str, client: &Clie
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let cli_ver = matches.value_of("ver").unwrap_or("").to_string().to_lowercase();
 
     let request = PutBucketVersioningRequest {
@@ -668,6 +688,12 @@ fn get_object_list<P, D>(bucket: &str, prefix: &str, list_version: u16, client: 
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = ListObjectsRequest::default();
     request.bucket = bucket.to_string();
     if !prefix.is_empty() {
@@ -722,7 +748,13 @@ fn get_object_version_list<P, D>(bucket: &str,
                                  client: &Client<P,D>)
                                  -> Result<(), S3Error>
                                  where P: AwsCredentialsProvider,
-                                       D: DispatchSignedRequest {
+                                       D: DispatchSignedRequest
+{
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
     let mut request = ListObjectVersionsRequest::default();
     request.bucket = bucket.to_string();
     if !prefix.is_empty() {
@@ -768,6 +800,12 @@ fn get_object_multipart_list<P, D>(bucket: &str, upload_id: &str, key: &str, cli
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     if upload_id.is_empty() {
         let mut request = MultipartUploadListRequest::default();
         request.bucket = bucket.to_string();
@@ -850,6 +888,18 @@ fn get_object<P, D>(bucket: &str, object: &str, path: &str, operation: Option<&m
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
+    if object.is_empty() {
+        let error = format!("Object was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = GetObjectRequest::default();
     request.bucket = bucket.to_string();
     request.key = object.to_string();
@@ -917,6 +967,18 @@ fn get_object_range<P, D>(bucket: &str, object: &str, offset: u64, len: u64, pat
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
+    if object.is_empty() {
+        let error = format!("Object was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = GetObjectRequest::default();
     request.bucket = bucket.to_string();
     request.key = object.to_string();
@@ -929,6 +991,18 @@ fn get_object_head<P, D>(bucket: &str, object: &str, client: &Client<P, D>) -> R
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
+    if object.is_empty() {
+        let error = format!("Object was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = HeadObjectRequest::default();
     request.bucket = bucket.to_string();
     request.key = object.to_string();
@@ -970,6 +1044,18 @@ fn get_object_acl<P, D>(bucket: &str, object: &str, client: &Client<P, D>) -> Re
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
+    if object.is_empty() {
+        let error = format!("Object was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = GetObjectAclRequest::default();
     request.bucket = bucket.to_string();
     request.key = object.to_string();
@@ -1017,6 +1103,12 @@ fn put_object<P, D>(bucket: &str,
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let file = File::open(object).unwrap();
     let metadata = file.metadata().unwrap();
 
@@ -1085,6 +1177,12 @@ fn abort_multipart_upload<P, D>(bucket: &str, object: &str, id: &str, client: &C
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = MultipartUploadAbortRequest::default();
     request.bucket = bucket.to_string();
     request.upload_id = id.to_string();
@@ -1140,6 +1238,12 @@ fn put_multipart_upload<P, D>(bucket: &str,
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let correct_key = if key.is_empty() {
         let path = Path::new(object);
         path.file_name().unwrap().to_str().unwrap().to_string()
@@ -1292,6 +1396,18 @@ fn delete_object<P, D>(bucket: &str, object: &str, version: &str, operation: Opt
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
+    if bucket.is_empty() {
+        let error = format!("Bucket was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
+    if object.is_empty() {
+        let error = format!("Object was not specified");
+        println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
+        return Err(S3Error::new(error));
+    }
+
     let mut request = DeleteObjectRequest::default();
     request.bucket = bucket.to_string();
     request.key = object.to_string();
@@ -1331,1195 +1447,4 @@ fn delete_object<P, D>(bucket: &str, object: &str, version: &str, operation: Opt
     }
 
     Ok(())
-}
-
-// CEPH RGW ONLY SECTION
-// Check for is_admin. If true then it's assumed this is for Ceph's RGW and NOT AWS.
-fn buckets<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let is_admin = client.is_admin;
-
-    if is_admin {
-        let mut method = String::from("GET");
-
-        let mut command = matches.value_of("command").unwrap_or("");
-        let mut user = matches.value_of("user").unwrap_or("").to_string();
-        let stats = matches.value_of("stats").unwrap_or("false").to_string().to_lowercase();
-
-        // Make into macro...
-        match user.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => { user = "".to_string(); },
-            a @ _ => { user = a.to_string(); },
-        }
-        match command.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => { command = ""; },
-            a @ _ => { command = a; },
-        }
-
-        let mut path: String = "admin/".to_string();
-        let mut params = Params::new();
-        let mut error: String = "".to_string();
-        let mut path_options: Option<String> = None;
-
-        match command {
-            "delete" => {
-                if bucket.is_empty() {
-                    error += &format!("Bucket value must be valid for delete command. ");
-                }
-                if !error.is_empty() {
-                    let e = S3Error::new(error);
-                    println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-                    return Err(e);
-                }
-                path += "bucket";
-                method = "DELETE".to_string();
-
-                params.put("bucket", bucket);
-                // NB: Could add an additional option but for now just remove the objects first.
-                params.put("purge-objects", "true");
-            },
-            "index" => {
-                if bucket.is_empty() {
-                    error += &format!("Bucket value must be valid for index command. ");
-                }
-                if !error.is_empty() {
-                    let e = S3Error::new(error);
-                    println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-                    return Err(e);
-                }
-                let fix = matches.value_of("fix").unwrap_or("false").to_string().to_lowercase();
-                let check = matches.value_of("check").unwrap_or("false").to_string().to_lowercase();
-
-                path += "bucket";
-                path_options = Some("?index&".to_string());
-                params.put("bucket", bucket);
-                if !fix.is_empty() {
-                    params.put("fix", &fix);
-                }
-                if !check.is_empty() {
-                    params.put("check-objects", &check);
-                }
-            },
-            "link" => {
-                if bucket.is_empty() {
-                    error += &format!("Bucket value must be valid for link command. ");
-                }
-                if user.is_empty() {
-                    error += &format!("User value must be valid for link command. ");
-                }
-                if !error.is_empty() {
-                    let e = S3Error::new(error);
-                    println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-                    return Err(e);
-                }
-                method = "PUT".to_string();
-
-                path += "bucket";
-                params.put("bucket", bucket);
-                params.put("uid", &user);
-            },
-            "ls" => {
-                path += "metadata/bucket";
-                if !user.is_empty() {
-                    params.put("uid", &user);
-                }
-            },
-            "policy" => {
-                path += "bucket";
-                path_options = Some("?policy&".to_string());
-                if !bucket.is_empty() {
-                    params.put("bucket", bucket);
-                } else {
-                    let e = S3Error::new("Bucket must be valid");
-                    println_color_quiet!(client.is_quiet, client.error.color, "{}", e);
-                    return Err(e);
-                }
-            },
-            "stats" => {
-                path += "bucket";
-                if !bucket.is_empty() {
-                    params.put("bucket", bucket);
-                }
-                params.put("stats", &stats);
-                if !user.is_empty() {
-                    params.put("uid", &user);
-                }
-            },
-            "unlink" => {
-                if bucket.is_empty() {
-                    error += &format!("Bucket value must be valid for link command. ");
-                }
-                if user.is_empty() {
-                    error += &format!("User value must be valid for link command. ");
-                }
-                if !error.is_empty() {
-                    let e = S3Error::new(error);
-                    println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-                    return Err(e);
-                }
-                method = "POST".to_string();
-
-                path += "bucket";
-                params.put("bucket", bucket);
-                params.put("uid", &user);
-            },
-            _ => {
-                path += "bucket";
-            }
-        }
-
-        let mut request = AdminRequest::default();
-        request.bucket = Some(bucket.to_string());
-        request.method = Some(method);
-        request.admin_path = Some(path);
-        if path_options.is_some() {
-            request.path_options = path_options;
-        }
-        request.params = params;
-        if !user.is_empty() {
-            request.uid = Some(user);
-        }
-
-        match client.s3client.admin(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output.payload);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                    },
-                    OutputFormat::JSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 json::encode(&output.payload).unwrap_or("{}".to_string()));
-                        }
-                    },
-                    OutputFormat::PrettyJSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output.payload));
-                        }
-                    },
-                    _ => {},
-                }
-            },
-            Err(e) => {
-                let format = format!("{:#?}", e);
-                let error = S3Error::new(format);
-                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-                return Err(error);
-            },
-        }
-    }
-
-    Ok(())
-}
-
-fn objects<P, D>(matches: &ArgMatches, bucket: &str, object: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let is_admin = client.is_admin;
-
-    if is_admin {
-        let method = String::from("DELETE");
-
-        let mut command = matches.value_of("command").unwrap_or("");
-        match command.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => { command = ""; },
-            a @ _ => { command = a; },
-        }
-
-        let path: String = "admin/bucket".to_string();
-        let mut params = Params::new();
-        let mut error: String = "".to_string();
-
-        match command {
-            "delete" => {
-                if bucket.is_empty() {
-                    error += &format!("Bucket value must be valid for delete command. ");
-                }
-                if object.is_empty() {
-                    error += &format!("Object value must be valid for delete command. ");
-                }
-                if !error.is_empty() {
-                    let e = S3Error::new(error);
-                    println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-                    return Err(e);
-                }
-                params.put("bucket", bucket);
-                params.put("object", object);
-            },
-            a @ _ => {
-                let e = S3Error::new(format!("Invalid object command: {}", a));
-                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", e);
-                return Err(e);
-            }
-        }
-
-        let mut request = AdminRequest::default();
-        request.bucket = Some(bucket.to_string());
-        request.method = Some(method);
-        request.admin_path = Some(path);
-        request.path_options = Some("?object&".to_string());
-        request.params = params;
-
-        match client.s3client.admin(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output.payload);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                    },
-                    OutputFormat::JSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 json::encode(&output.payload).unwrap_or("{}".to_string()));
-                        }
-                    },
-                    OutputFormat::PrettyJSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output.payload));
-                        }
-                    },
-                    _ => {},
-                }
-            },
-            Err(error) => {
-                let format = format!("{:#?}", error);
-                let error = S3Error::new(format);
-                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-                return Err(error);
-            },
-        }
-    }
-
-    Ok(())
-}
-
-fn quota<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let is_admin = client.is_admin;
-
-    if is_admin {
-        let mut params = Params::new();
-        let mut method = String::new();
-
-        let mut user = matches.value_of("user").unwrap_or("").to_string();
-        // Make into macro...
-        match user.clone().trim() {
-            "" | "." | "*" | "$" | "s3://" => { user = "".to_string(); },
-            a @ _ => { user = a.to_string(); },
-        }
-        if user.is_empty() {
-            let error = S3Error::new("User was not specified");
-            println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-            return Err(error);
-        }
-
-        params.put("uid", &user);
-
-        let mut command = matches.value_of("command").unwrap_or("");
-        match command.clone().trim() {
-            "user" => {
-                command = "user";
-                params.put("quota-type", "user");
-            },
-            _ => {
-                command = "bucket";
-                params.put("quota-type", "bucket");
-            },
-        }
-        let action = matches.value_of("action").unwrap_or("get").to_string().to_lowercase();
-        match action.clone().as_ref() {
-            "set" => { method = "PUT".to_string(); },
-            "enable" => {
-                method = "PUT".to_string();
-                params.put("enabled", "true");
-            },
-            "disable" => {
-                method = "PUT".to_string();
-                params.put("enabled", "false");
-            },
-            _ => { method = "GET".to_string(); },
-        }
-
-        if action.clone() == "set".to_string() {
-            let mut size_str = matches.value_of("size").unwrap_or("").to_string();
-            //match &size_str.clone().to_lowercase() as &str {
-            match size_str.clone().to_lowercase().as_ref() {
-                "" | "." | "*" | "$" | "s3://" => {},
-                a @ _ => {
-                    size_str = a.to_string();
-                    if size_str == "0".to_string() {
-                        size_str = "-1".to_string();
-                    }
-                    params.put("max-size-kb", &size_str);
-                },
-            }
-
-            let mut object_str = matches.value_of("count").unwrap_or("").to_string();
-            //match &object_str.clone().to_lowercase() as &str {
-            match object_str.clone().to_lowercase().as_ref() {
-                "" | "." | "*" | "$" | "s3://" => {},
-                a @ _ => {
-                    object_str = a.to_string();
-                    if object_str == "0".to_string() {
-                        object_str = "-1".to_string();
-                    }
-                    params.put("max-objects", &object_str);
-                },
-            }
-        }
-
-        let path: String = "admin/user".to_string();
-
-        let mut request = AdminRequest::default();
-        request.bucket = Some(bucket.to_string());
-        request.method = Some(method);
-        request.admin_path = Some(path);
-        request.path_options = Some("?quota&".to_string());
-        request.params = params;
-
-        match client.s3client.admin(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output.payload);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                    },
-                    OutputFormat::JSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 json::encode(&output.payload).unwrap_or("{}".to_string()));
-                        }
-                    },
-                    OutputFormat::PrettyJSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output.payload));
-                        }
-                    },
-                    _ => {},
-                }
-            },
-            Err(error) => {
-                let format = format!("{:#?}", error);
-                let error = S3Error::new(format);
-                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-                return Err(error);
-            },
-        }
-    }
-
-    Ok(())
-}
-
-fn caps<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let is_admin = client.is_admin;
-
-    if is_admin {
-        let mut method = String::from("PUT");
-        let path: String = "admin/user".to_string();
-        let params: Params;
-
-        let sub_params = match matches.subcommand() {
-            ("create", Some(sub_matches)) => {
-                user_caps(sub_matches, bucket, &client)
-            },
-            ("delete", Some(sub_matches)) => {
-                method = "DELETE".to_string();
-                user_caps(sub_matches, bucket, &client)
-            },
-            (_, _) => { Err(S3Error::new("Unrecognized command")) },
-        };
-
-        match sub_params {
-            Ok(subparams) => params = subparams.unwrap(),
-            Err(e) => {
-                let error = S3Error::new(format!("{}", e));
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(error);
-            },
-        }
-
-        let mut request = AdminRequest::default();
-        request.bucket = Some(bucket.to_string());
-        request.method = Some(method);
-        request.admin_path = Some(path);
-        request.path_options = Some("?caps&".to_string());
-        request.params = params;
-
-        match client.s3client.admin(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output.payload);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                    },
-                    OutputFormat::JSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 json::encode(&output.payload).unwrap_or("{}".to_string()));
-                        }
-                    },
-                    OutputFormat::PrettyJSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output.payload));
-                        }
-                    },
-                    _ => {},
-                }
-            },
-            Err(error) => {
-                let format = format!("{:#?}", error);
-                let error = S3Error::new(format);
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(error);
-            },
-        }
-    }
-
-    Ok(())
-}
-
-fn user_caps<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut params = Params::new();
-
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { return Err(S3Error::new("User was not specified")); },
-        a @ _ => {
-            user = a;
-            params.put("uid", user);
-        },
-    }
-
-    let mut caps = matches.value_of("caps").unwrap_or("");
-    match caps.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { return Err(S3Error::new("Caps was not specified")); },
-        a @ _ => {
-            caps = a;
-            params.put("user-caps", caps);
-        },
-    }
-
-    Ok(Some(params))
-}
-
-fn user<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let is_admin = client.is_admin;
-
-    if is_admin {
-        let mut method = String::from("GET");
-        let mut path: String = "admin/user".to_string();
-        let params: Params;
-
-        let sub_params = match matches.subcommand() {
-            ("create", Some(sub_matches)) => {
-                method = "PUT".to_string();
-                user_create(sub_matches, bucket, &client)
-            },
-            ("delete", Some(sub_matches)) => {
-                method = "DELETE".to_string();
-                user_delete(sub_matches, bucket, &client)
-            },
-            ("ls", Some(sub_matches)) => {
-                path = "admin/metadata/user".to_string();
-                user_get_list(sub_matches, bucket, false, &client)
-            },
-            ("modify", Some(sub_matches)) => {
-                method = "POST".to_string();
-                user_modify(sub_matches, bucket, &client)
-            },
-            (_, Some(sub_matches)) => user_get_list(sub_matches, bucket, true, &client),
-            (_, None) => { Err(S3Error::new("Unrecognized command")) },
-        };
-
-        match sub_params {
-            Ok(subparams) => params = subparams.unwrap(),
-            Err(e) => {
-                let error = S3Error::new(format!("{}", e));
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(error);
-            },
-        }
-
-        let mut request = AdminRequest::default();
-        request.bucket = Some(bucket.to_string());
-        request.method = Some(method);
-        request.admin_path = Some(path);
-        request.params = params;
-
-        match client.s3client.admin(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output.payload);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                    },
-                    OutputFormat::JSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 json::encode(&output.payload).unwrap_or("{}".to_string()));
-                        }
-                    },
-                    OutputFormat::PrettyJSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output.payload));
-                        }
-                    },
-                    _ => {},
-                }
-            },
-            Err(error) => {
-                let format = format!("{:#?}", error);
-                let error = S3Error::new(format);
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(error);
-            },
-        }
-    }
-
-    Ok(())
-}
-
-fn user_create<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut params = Params::new();
-
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { return Err(S3Error::new("User was not specified")); },
-        a @ _ => {
-            user = a;
-            params.put("uid", user);
-        },
-    }
-
-    let mut display_name = matches.value_of("display_name").unwrap_or("");
-    match display_name.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { return Err(S3Error::new("Display-name was not specified")); },
-        a @ _ => {
-            display_name = a;
-            params.put("display-name", display_name);
-        },
-    }
-
-    let mut email = matches.value_of("email").unwrap_or("");
-    match email.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { email = ""; },
-        a @ _ => {
-            email = a;
-            params.put("email", email);
-        },
-    }
-
-    let mut access_key = matches.value_of("access_key").unwrap_or("");
-    match access_key.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { access_key = ""; },
-        a @ _ => {
-            access_key = a;
-            params.put("access-key", access_key);
-        },
-    }
-
-    let mut secret_key = matches.value_of("secret_key").unwrap_or("");
-    match secret_key.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { secret_key = ""; },
-        a @ _ => {
-            secret_key = a;
-            params.put("secret-key", secret_key);
-        },
-    }
-
-    let mut suspended = matches.value_of("suspended").unwrap_or("false");
-    match suspended.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { suspended = "false"; },
-        a @ _ => {
-            suspended = a;
-            params.put("suspended", suspended);
-        },
-    }
-
-    let mut caps = matches.value_of("caps").unwrap_or("");
-    match caps.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { caps = ""; },
-        a @ _ => {
-            caps = a;
-            params.put("caps", caps);
-        },
-    }
-
-    Ok(Some(params))
-}
-
-fn user_delete<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { user = ""; },
-        a @ _ => { user = a; },
-    }
-
-    if user.is_empty() {
-        return Err(S3Error::new("User was not specified"));
-    }
-
-    let mut purge_data = matches.value_of("purge_data").unwrap_or("true");
-    match purge_data.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { purge_data = "true"; },
-        a @ _ => { purge_data = a; },
-    }
-
-    let mut params = Params::new();
-    params.put("uid", user);
-    params.put("purge-data", purge_data);
-
-    Ok(Some(params))
-}
-
-fn user_get_list<P, D>(matches: &ArgMatches, bucket: &str, user_required: bool, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { user = ""; },
-        a @ _ => { user = a; },
-    }
-
-    if user.is_empty() && user_required {
-        return Err(S3Error::new("User was not specified"));
-    }
-
-    let mut params = Params::new();
-    params.put("uid", user);
-
-    Ok(Some(params))
-}
-
-fn user_modify<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut params = Params::new();
-
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { return Err(S3Error::new("User was not specified")); },
-        a @ _ => {
-            user = a;
-            params.put("uid", user);
-        },
-    }
-
-    let mut display_name = matches.value_of("display_name").unwrap_or("");
-    match display_name.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { display_name = ""; },
-        a @ _ => {
-            display_name = a;
-            params.put("display-name", display_name);
-        },
-    }
-
-    let mut suspended = matches.value_of("suspended").unwrap_or("false");
-    match suspended.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { suspended = "false"; },
-        a @ _ => {
-            suspended = a;
-            params.put("suspended", suspended);
-        },
-    }
-
-    let mut email = matches.value_of("email").unwrap_or("");
-    match email.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { email = ""; },
-        a @ _ => {
-            email = a;
-            params.put("email", email);
-        },
-    }
-
-    let mut access_key = matches.value_of("access_key").unwrap_or("");
-    match access_key.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { access_key = ""; },
-        a @ _ => {
-            access_key = a;
-            params.put("access-key", access_key);
-        },
-    }
-
-    let mut secret_key = matches.value_of("secret_key").unwrap_or("");
-    match secret_key.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { secret_key = ""; },
-        a @ _ => {
-            secret_key = a;
-            params.put("secret-key", secret_key);
-        },
-    }
-
-    let mut caps = matches.value_of("caps").unwrap_or("");
-    match caps.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { caps = ""; },
-        a @ _ => {
-            caps = a;
-            params.put("caps", caps);
-        },
-    }
-
-    let mut max = matches.value_of("max_buckets").unwrap_or("");
-    match max.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { max = ""; },
-        a @ _ => {
-            max = a;
-            params.put("max-buckets", max);
-        },
-    }
-
-    Ok(Some(params))
-}
-
-fn usage<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let is_admin = client.is_admin;
-
-    if is_admin {
-        let mut method = String::from("GET");
-        let path: String = "admin/usage".to_string();
-        let params: Params;
-
-        let sub_params = match matches.subcommand() {
-            ("trim", Some(sub_matches)) => {
-                method = "DELETE".to_string();
-                usage_trim(sub_matches, bucket, &client)
-            },
-            (_, Some(sub_matches)) => usage_list(sub_matches, bucket, &client),
-            (_, None) => { Err(S3Error::new("Unrecognized command")) },
-        };
-
-        match sub_params {
-            Ok(subparams) => params = subparams.unwrap(),
-            Err(e) => {
-                let error = S3Error::new(format!("{}", e));
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(error);
-            },
-        }
-
-        let mut request = AdminRequest::default();
-        request.bucket = Some(bucket.to_string());
-        request.method = Some(method);
-        request.admin_path = Some(path);
-        request.params = params;
-
-        match client.s3client.admin(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output.payload);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                    },
-                    OutputFormat::JSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 json::encode(&output.payload).unwrap_or("{}".to_string()));
-                        }
-                    },
-                    OutputFormat::PrettyJSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output.payload));
-                        }
-                    },
-                    _ => {},
-                }
-            },
-            Err(error) => {
-                let format = format!("{:#?}", error);
-                let error = S3Error::new(format);
-                println_color_quiet!(client.is_quiet, client.error.color, "{:#?}", error);
-                return Err(error);
-            },
-        }
-    }
-
-    Ok(())
-}
-
-fn usage_list<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut params = Params::new();
-
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => {
-            user = "";
-        },
-        a @ _ => {
-            user = a;
-            params.put("uid", user);
-        },
-    }
-
-    let mut start = matches.value_of("start").unwrap_or("");
-    match start.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { start = ""; },
-        a @ _ => {
-            start = a;
-            params.put("start", start);
-        },
-    }
-
-    let mut end = matches.value_of("end").unwrap_or("");
-    match end.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { end = ""; },
-        a @ _ => {
-            end = a;
-            params.put("end", end);
-        },
-    }
-
-    let mut show_entries = matches.value_of("show_entries").unwrap_or("false");
-    match show_entries.clone().trim() {
-        "true" => {
-            show_entries = "true";
-            params.put("show-entries", "true");
-        },
-        _ => {
-            show_entries = "false";
-        },
-    }
-
-    let mut show_summary = matches.value_of("show_summary").unwrap_or("false");
-    match show_summary.clone().trim() {
-        "true" => {
-            show_summary = "true";
-            params.put("show-summary", "true");
-        },
-        _ => {
-            show_summary = "false";
-        },
-    }
-
-    Ok(Some(params))
-}
-
-fn usage_trim<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut params = Params::new();
-
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => {
-            user = "";
-        },
-        a @ _ => {
-            user = a;
-            params.put("uid", user);
-        },
-    }
-
-    let mut start = matches.value_of("start").unwrap_or("");
-    match start.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { start = ""; },
-        a @ _ => {
-            start = a;
-            params.put("start", start);
-        },
-    }
-
-    let mut end = matches.value_of("end").unwrap_or("");
-    match end.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { end = ""; },
-        a @ _ => {
-            end = a;
-            params.put("end", end);
-        },
-    }
-
-    let mut remove_all = matches.value_of("remove_all").unwrap_or("true");
-    match remove_all.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => {
-            remove_all = "true";
-        },
-        a @ _ => {
-            remove_all = a;
-        },
-    }
-
-    if !user.is_empty() {
-        remove_all = "true";
-    }
-    params.put("remove-all", remove_all);
-
-    Ok(Some(params))
-}
-
-fn keys<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<(), S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let is_admin = client.is_admin;
-
-    if is_admin {
-        let mut method = String::from("GET");
-        let path: String = "admin/user".to_string();
-        let params: Params;
-
-        let sub_params = match matches.subcommand() {
-            ("create", Some(sub_matches)) => {
-                method = "PUT".to_string();
-                user_key_create(sub_matches, bucket, &client)
-            },
-            ("delete", Some(sub_matches)) => {
-                method = "DELETE".to_string();
-                user_key_delete(sub_matches, bucket, &client)
-            },
-            (_, _) => { Err(S3Error::new("Unrecognized command")) },
-        };
-
-        match sub_params {
-            Ok(subparams) => params = subparams.unwrap(),
-            Err(e) => {
-                let error = S3Error::new(format!("{}", e));
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(error);
-            },
-        }
-
-        let mut request = AdminRequest::default();
-        request.bucket = Some(bucket.to_string());
-        request.method = Some(method);
-        request.admin_path = Some(path);
-        request.path_options = Some("?key&".to_string());
-        request.params = params;
-
-        match client.s3client.admin(&request) {
-            Ok(output) => {
-                match client.output.format {
-                    OutputFormat::Serialize => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{:#?}", output.payload);
-                    },
-                    OutputFormat::Plain => {
-                        // Could have already been serialized before being passed to this function.
-                        println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                    },
-                    OutputFormat::JSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet,
-                                                 client.output.color,
-                                                 "{}",
-                                                 json::encode(&output.payload).unwrap_or("{}".to_string()));
-                        }
-                    },
-                    OutputFormat::PrettyJSON => {
-                        if output.format == AdminOutputType::Json {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", output.payload);
-                        }
-                        else {
-                            println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&output.payload));
-                        }
-                    },
-                    _ => {},
-                }
-            },
-            Err(error) => {
-                let format = format!("{:#?}", error);
-                let error = S3Error::new(format);
-                println_color_quiet!(client.is_quiet, client.error.color, "{}", error);
-                return Err(error);
-            },
-        }
-    }
-
-    Ok(())
-}
-
-fn user_key_create<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut params = Params::new();
-
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { return Err(S3Error::new("User was not specified")); },
-        a @ _ => {
-            user = a;
-            params.put("uid", user);
-        },
-    }
-
-    let mut generate_key = matches.value_of("generate_key").unwrap_or("");
-    match generate_key.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { generate_key = "true"; },
-        a @ _ => {
-            generate_key = a;
-            params.put("generate-key", generate_key);
-        },
-    }
-
-    let mut access_key = matches.value_of("access_key").unwrap_or("");
-    match access_key.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { access_key = "" },
-        a @ _ => {
-            access_key = a;
-            params.put("access-key", access_key);
-        },
-    }
-
-    let mut secret_key = matches.value_of("secret_key").unwrap_or("");
-    match secret_key.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { secret_key = ""; },
-        a @ _ => {
-            secret_key = a;
-            params.put("secret-key", secret_key);
-        },
-    }
-
-    Ok(Some(params))
-}
-
-fn user_key_delete<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Result<Option<Params>, S3Error>
-    where P: AwsCredentialsProvider,
-          D: DispatchSignedRequest,
-{
-    let mut params = Params::new();
-
-    let mut access_key = matches.value_of("access_key").unwrap_or("");
-    match access_key.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { return Err(S3Error::new("Access-key was not specified")); },
-        a @ _ => {
-            access_key = a;
-            params.put("access-key", access_key);
-        },
-    }
-
-    let mut user = matches.value_of("user").unwrap_or("");
-    match user.clone().trim() {
-        "" | "." | "*" | "$" | "s3://" => { user = ""; },
-        a @ _ => {
-            user = a;
-            params.put("uid", user);
-        },
-    }
-
-    Ok(Some(params))
 }

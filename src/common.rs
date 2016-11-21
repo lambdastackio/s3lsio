@@ -13,7 +13,59 @@
 // limitations under the License.
 
 #![allow(unused_mut)]
+#![allow(unused_assignments)]
 
+use clap::ArgMatches;
+
+/// Finds the bucket, object and last values based on the level of the ArgMatches
+///
+pub fn find_bucket_object_last<'a>(matches: &'a ArgMatches<'a>) -> (&'a str, String, &'a str) {
+    let mut bucket: &str = "";
+    let mut object: String = "".to_string();
+    let mut last: &str = "";
+
+    match matches.value_of("bucket") {
+        Some(buck) => {
+            let mut tmp_bucket: &str = "";
+
+            if buck.contains("s3://") {
+                tmp_bucket = &buck[5..];
+            } else {
+                tmp_bucket = buck.clone();
+            }
+            if tmp_bucket.contains('/') {
+                let components: Vec<&str> = tmp_bucket.split('/').collect();
+                let mut first: bool = true;
+                let mut object_first: bool = true;
+
+                for part in components {
+                    if first {
+                        bucket = part;
+                    } else {
+                        if !object_first {
+                            object += "/";
+                        }
+                        object_first = false;
+                        object += part;
+                        last = part;
+                    }
+                    first = false;
+                }
+            } else {
+                match tmp_bucket.trim() {
+                    "." | "*" | "$" | "s3://" => {},
+                    a @ _ => { bucket = a; },
+                }
+            }
+        },
+        None => {},
+    }
+
+    (bucket, object, last)
+}
+
+/// Simply returns the bucket from a bucket/object path
+///
 pub fn get_bucket(cli_bucket: String) -> Option<String> {
     let mut bucket: &str = "";
 
