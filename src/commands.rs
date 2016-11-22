@@ -584,7 +584,7 @@ fn set_bucket_acl<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D
     }
 
     let acl: CannedAcl;
-    let cli_acl = matches.value_of("acl").unwrap_or("").to_string().to_lowercase();
+    let cli_acl = matches.value_of("acls").unwrap_or("").to_string().to_lowercase();
 
     match cli_acl.as_ref() {
         "public-read" => acl = CannedAcl::PublicRead,

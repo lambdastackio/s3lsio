@@ -19,7 +19,7 @@ REPO_BASE=$(git rev-parse --show-toplevel)
 cargo build --release
 
 APP=s3lsio
-VERSION=0.1.16
+VERSION=0.1.17
 
 tar -cvzf $APP-$VERSION.tar.gz $REPO_BASE/target/release/$APP
 
