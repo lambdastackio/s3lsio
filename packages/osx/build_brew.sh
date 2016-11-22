@@ -29,7 +29,15 @@ s3lsio acl set public-read s3://s3lsio/mac/$APP-$VERSION.tar.gz
 # NB: This is not a good way but it creates the hash to change in s3lsio.rb.
 # This needs to be changed soon to make it smooth...
 
-brew create https://s3.amazonaws.com/s3lsio/mac/$APP-$VERSION.tar.gz
+# Do the brew create the first time. Then modify the formula for your install
+# brew create https://s3.amazonaws.com/s3lsio/mac/$APP-$VERSION.tar.gz
 
-# :( Have to manually edit the s3lsio.rb with the correct hash key and then update the homebrew-tap repo
-# Homebrew can be a little unforgiving but it is written in Ruby :)
+# Generate the checksum
+CHECKSUM=$(shasum -a 256 $APP-$VERSION.tar.gz | awk '{print $1}')
+echo $CHECKSUM
+
+rm $APP-$VERSION.tar.gz
+
+# Copy the checksum to the s3lsio.rb before committing it to github
+
+# :( Have to manually edit the s3lsio.rb (currently) with the correct hash key and then update the homebrew-tap repo
