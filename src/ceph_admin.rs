@@ -22,13 +22,15 @@ use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::fs::File;
 use std::ffi::OsStr;
-use md5;
+use std::ops::Index;
 
+use md5;
 use term;
 use rustc_serialize::json;
 use rustc_serialize::base64::{STANDARD, ToBase64};
-
 use clap::ArgMatches;
+use rand::{thread_rng, Rng};
+
 use aws_sdk_rust::aws::errors::s3::S3Error;
 use aws_sdk_rust::aws::common::credentials::AwsCredentialsProvider;
 use aws_sdk_rust::aws::common::request::DispatchSignedRequest;
@@ -46,6 +48,18 @@ use Client;
 use Output;
 use OutputFormat;
 use Commands;
+
+static ALPHA_NUMERIC_LOWER: &'static str = "0123456789abcdefghijklmnopqrstuvwxyz";
+static ALPHA_NUMERIC_UPPER: &'static str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+static ALPHA_NUMERIC: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+/// Holds the keys that were generated with the `admin key gen` command
+#[derive(Debug, Default, Clone, RustcDecodable, RustcEncodable)]
+pub struct AdminKeys {
+    pub access_key: String,
+    pub secret_key: String,
+}
+
 
 // CEPH RGW ONLY SECTION
 /// Ceph Admin command function. Ability to perform everything radosgw-admin cli does
@@ -1117,6 +1131,9 @@ fn keys<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Resu
             method = "DELETE".to_string();
             user_key_delete(sub_matches, bucket, &client)
         },
+        ("gen", Some(sub_matches)) => {
+            return key_generate(sub_matches, &client);
+        },
         (_, _) => { Err(S3Error::new("Unrecognized command")) },
     };
 
@@ -1180,6 +1197,58 @@ fn keys<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Resu
         },
     }
 
+    Ok(())
+}
+
+fn key_generate<P, D>(matches: &ArgMatches, client: &Client<P, D>) -> Result<(), S3Error>
+    where P: AwsCredentialsProvider,
+          D: DispatchSignedRequest,
+{
+    let keys = AdminKeys::default();
+    let mut access_key: String = String::new();
+    let mut secret_key: String = String::new();
+    let alpha_numeric_upper_len: u8 = ALPHA_NUMERIC_UPPER.len() as u8;
+    let alpha_numeric_len: u8 = ALPHA_NUMERIC.len() as u8;
+    let alpha_numeric_upper_vec = ALPHA_NUMERIC_UPPER.to_string().into_bytes();
+    let alpha_numeric_vec = ALPHA_NUMERIC.to_string().into_bytes();
+    let ak_len = 20;
+    let sk_len = 40;
+
+    // access_key max length 20
+    // secret_key max length 40
+
+    let mut ak_buf = [0u8; 20];
+    let mut sk_buf = [0u8; 40];
+
+    thread_rng().fill_bytes(&mut ak_buf);
+    thread_rng().fill_bytes(&mut sk_buf);
+
+    for i in 0..ak_len {
+        let pos: u8 = ak_buf[i];
+        let chr = alpha_numeric_upper_vec[(pos % alpha_numeric_upper_len) as usize];
+        access_key.push(chr as char);
+    }
+
+    for i in 0..sk_len {
+        let pos: u8 = sk_buf[i];
+        let chr = alpha_numeric_vec[(pos % alpha_numeric_len) as usize];
+        secret_key.push(chr as char);
+    }
+
+    println!("{:?}", access_key);
+    println!("{:?}", secret_key);
+
+/*
+    match client.output.format {
+        OutputFormat::JSON | OutputFormat::PrettyJSON => {
+            println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&keys));
+        },
+        _ => {
+            // Plain
+            println_color_quiet!(client.is_quiet, client.output.color, "{}", "output.payload");
+        },
+    }
+*/
     Ok(())
 }
 

@@ -21,10 +21,11 @@ cargo build --release
 APP=s3lsio
 VERSION=0.1.17
 
-tar -cvzf $APP-$VERSION.tar.gz $REPO_BASE/target/release/$APP
+cp $REPO_BASE/target/release/$APP .
+tar -cvzf $APP-$VERSION.tar.gz $APP
 
-s3lsio cp $APP-$VERSION.tar.gz s3://s3lsio/mac/$APP-$VERSION.tar.gz
-s3lsio acl set public-read s3://s3lsio/mac/$APP-$VERSION.tar.gz
+s3lsio cp $APP-$VERSION.tar.gz s3://s3lsio/osx/$APP-$VERSION.tar.gz
+s3lsio acl set public-read s3://s3lsio/osx/$APP-$VERSION.tar.gz
 
 # NB: This is not a good way but it creates the hash to change in s3lsio.rb.
 # This needs to be changed soon to make it smooth...
@@ -33,10 +34,15 @@ s3lsio acl set public-read s3://s3lsio/mac/$APP-$VERSION.tar.gz
 # brew create https://s3.amazonaws.com/s3lsio/mac/$APP-$VERSION.tar.gz
 
 # Generate the checksum
+# OSX
 CHECKSUM=$(shasum -a 256 $APP-$VERSION.tar.gz | awk '{print $1}')
+# Linux
+# CHECKSUM=$(sha256sum $APP-$VERSION.tar.gz | awk '{print $1}')
+
 echo $CHECKSUM
 
-rm $APP-$VERSION.tar.gz
+# rm $APP-$VERSION.tar.gz
+rm $APP
 
 # Copy the checksum to the s3lsio.rb before committing it to github
 

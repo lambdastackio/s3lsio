@@ -28,6 +28,8 @@ cargo build --release
 
 # Has to be as root...
 APP=s3lsio
+VERSION=0.1.17
+REV=0
 ARCH=x86_64
 BASE=/root/rpmbuild
 SPEC=$APP.spec
@@ -53,6 +55,9 @@ sudo chown $USER:$USER $REPO_BASE/*.rpm
 
 # Install it to make sure all works
 sudo rpm -Uvh $REPO_BASE/*.rpm
+
+s3lsio cp $REPO_BASE/$APP-$VERSION-$REV.$ARCH.rpm s3://s3lsio/linux/rpms/rhel/$APP-$VERSION-$REV.$ARCH.rpm
+s3lsio acl set public-read s3://s3lsio/linux/rpms/rhel/$APP-$VERSION-$REV.$ARCH.rpm
 
 # If you need it in another architecture instead of x86_64 then change the spec file and add BuildArch: <whatever here>
 # below Source0:

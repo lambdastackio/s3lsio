@@ -54,6 +54,7 @@ extern crate toml;
 extern crate md5;
 extern crate time;
 extern crate chrono;
+extern crate rand;
 
 use std::io;
 use std::env;
@@ -115,8 +116,6 @@ pub enum Commands {
     rb,
     rm,
     ls,
-    //setacl,
-    //setver,
     ver,
 }
 
@@ -175,7 +174,6 @@ fn main() {
     let mut is_quiet: bool = false;
     let mut is_time: bool = false;
     let mut is_bench: bool = false;
-    //let mut is_admin: bool = false;
     let mut is_compute_hash: bool = false;
     let mut is_keep_alive: bool = false;
     let mut is_bucket_virtual: bool = true;
@@ -217,11 +215,6 @@ fn main() {
         is_quiet = true;
     }
 
-    // If the -a or --admin flag was passed then allow Ceph RGW Admin access (provided keys have rights)
-    //if matches.is_present("admin") {
-    //    is_admin = true;
-    //}
-
     // If the -t or --time flag was passed then track operation time
     if matches.is_present("time") {
         is_time = true;
@@ -258,6 +251,7 @@ fn main() {
     let proxy_str = matches.value_of("proxy");
     let signature_str = matches.value_of("signature");
     let bench = matches.value_of("bench");
+    let user_agent = matches.value_of("user-agent").unwrap_or(DEFAULT_USER_AGENT);
 
     // Override some parameters when bench is specified...
     if bench.is_some() {
@@ -326,7 +320,7 @@ fn main() {
                                  if sign == "v2" {Signature::V2} else {Signature::V4},
                                  config.clone().endpoint,
                                  config.clone().proxy,
-                                 Some(DEFAULT_USER_AGENT.to_string()),
+                                 Some(user_agent.to_string()),
                                  Some(is_bucket_virtual));
 
     let mut s3client = S3Client::new(provider, endpoint);
@@ -345,7 +339,6 @@ fn main() {
         is_quiet: is_quiet,
         is_time: is_time,
         is_bench: is_bench,
-        //is_admin: is_admin,
         is_compute_hash: is_compute_hash,
     };
 
