@@ -165,7 +165,6 @@ pub struct Client<'a, P: 'a, D: 'a>
     pub is_quiet: bool,
     pub is_time: bool,
     pub is_bench: bool,
-    //pub is_admin: bool,
     pub is_compute_hash: bool,
 }
 
@@ -180,7 +179,7 @@ fn main() {
 
     env_logger::init().unwrap();
 
-    let version = format!("v{}", crate_version!());
+    let version = format!("{}", crate_version!());
     let mut home: PathBuf;
     // Get $HOME directory and set the default config. Let the CLI override the default.
     match env::home_dir() {
@@ -228,7 +227,6 @@ fn main() {
     // NOTE: Get parameters or config for region, signature etc
     // Safe to unwrap since a default value is passed in. If a panic occurs then the environment
     // does not support a home directory.
-    //let matches_clone = matches.clone();
 
     let config_option = matches.value_of("config").unwrap();
     let region = match matches.value_of("region").unwrap().to_string().to_lowercase().as_ref() {

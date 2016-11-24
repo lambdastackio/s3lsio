@@ -19,7 +19,7 @@ REPO_BASE=$(git rev-parse --show-toplevel)
 cargo build --release
 
 APP=s3lsio
-VERSION=0.1.17
+VERSION=$(s3lsio --version | awk '{print $2}')
 
 cp $REPO_BASE/target/release/$APP .
 tar -cvzf $APP-$VERSION.tar.gz $APP
@@ -36,14 +36,15 @@ s3lsio acl set public-read s3://s3lsio/osx/$APP-$VERSION.tar.gz
 # Generate the checksum
 # OSX
 CHECKSUM=$(shasum -a 256 $APP-$VERSION.tar.gz | awk '{print $1}')
-# Linux
-# CHECKSUM=$(sha256sum $APP-$VERSION.tar.gz | awk '{print $1}')
+
+# This file is found in https://github.com/lambdastackio/lsiotemplate.
+# It's a handlebars rust template cli
+lsiotemplate -d "{\"version\": \"$VERSION\", \"checksum\": \"$CHECKSUM\"}" -t homebrew-tap/s3lsio.rb.hbs -o homebrew-tap/s3lsio.rb
 
 echo $CHECKSUM
 
-# rm $APP-$VERSION.tar.gz
+rm $APP-$VERSION.tar.gz
 rm $APP
 
-# Copy the checksum to the s3lsio.rb before committing it to github
-
-# :( Have to manually edit the s3lsio.rb (currently) with the correct hash key and then update the homebrew-tap repo
+# NOTE:
+# Now commit and push to lambdastackio/homebrew-tap repo

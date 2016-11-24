@@ -49,7 +49,10 @@ use Output;
 use OutputFormat;
 use Commands;
 
-static ALPHA_NUMERIC_LOWER: &'static str = "0123456789abcdefghijklmnopqrstuvwxyz";
+// Not currently used but here in the event it's needed
+// static ALPHA_NUMERIC_LOWER: &'static str = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+// Use for key generation below
 static ALPHA_NUMERIC_UPPER: &'static str = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static ALPHA_NUMERIC: &'static str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -1200,11 +1203,13 @@ fn keys<P, D>(matches: &ArgMatches, bucket: &str, client: &Client<P, D>) -> Resu
     Ok(())
 }
 
+// This function creates the keys that can be used for RGW. It allows you to call this option
+// and then use the keys to create a user or add to an existing user.
 fn key_generate<P, D>(matches: &ArgMatches, client: &Client<P, D>) -> Result<(), S3Error>
     where P: AwsCredentialsProvider,
           D: DispatchSignedRequest,
 {
-    let keys = AdminKeys::default();
+    let mut keys = AdminKeys::default();
     let mut access_key: String = String::new();
     let mut secret_key: String = String::new();
     let alpha_numeric_upper_len: u8 = ALPHA_NUMERIC_UPPER.len() as u8;
@@ -1235,20 +1240,19 @@ fn key_generate<P, D>(matches: &ArgMatches, client: &Client<P, D>) -> Result<(),
         secret_key.push(chr as char);
     }
 
-    println!("{:?}", access_key);
-    println!("{:?}", secret_key);
-
-/*
     match client.output.format {
         OutputFormat::JSON | OutputFormat::PrettyJSON => {
+            keys.access_key = access_key;
+            keys.secret_key = secret_key;
+
             println_color_quiet!(client.is_quiet, client.output.color, "{}", json::as_pretty_json(&keys));
         },
         _ => {
             // Plain
-            println_color_quiet!(client.is_quiet, client.output.color, "{}", "output.payload");
+            println_color_quiet!(client.is_quiet, client.output.color, "{} {}", access_key, secret_key);
         },
     }
-*/
+
     Ok(())
 }
 

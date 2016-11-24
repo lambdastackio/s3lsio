@@ -28,7 +28,7 @@ cargo build --release
 
 # Has to be as root...
 APP=s3lsio
-VERSION=0.1.17
+VERSION=$(s3lsio --version | awk '{print $2}')
 REV=0
 ARCH=x86_64
 BASE=/root/rpmbuild
@@ -46,6 +46,8 @@ sudo cp $REPO_BASE/packages/rpm/specs/$SPEC $BASE/SPECS/$SPEC
 
 # Copy over base
 sudo cp $REPO_BASE/$RELEASE $BASE/SOURCES
+
+lsiotemplate -d "{\"version\": \"$VERSION\"}" -t specs/s3lsio.spec.hbs -o specs/s3lsio.spec
 
 # Use -bb option instead of -ba since we're not building from source and do not need a source rpm produced.
 sudo rpmbuild -bb $BASE/SPECS/$SPEC

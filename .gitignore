@@ -2,4 +2,7 @@ target
 .cargo
 .rpm
 .deb
+# The .rb and .spec files are generated via the lsiotemplate cli using the variables from the bash script files.
+.rb
+.spec
 *.tar.gz
