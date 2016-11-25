@@ -32,6 +32,7 @@ tar -cvzf $APP-$VERSION.tar.gz $APP
 
 # Do the brew create the first time. Then modify the formula for your install
 # brew create https://s3.amazonaws.com/s3lsio/mac/$APP-$VERSION.tar.gz
+# Change the `install` function and remove unneeded config options
 
 # Generate the checksum
 # OSX
@@ -49,3 +50,7 @@ rm $APP
 
 # NOTE:
 # Now commit and push to lambdastackio/homebrew-tap repo
+
+cd homebrew-tap
+git commit -am "Updating to version: $VERSION"
+git push origin master
