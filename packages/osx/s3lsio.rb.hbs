@@ -1,0 +1,13 @@
+class S3lsio < Formula
+  desc "S3 command-line utility."
+  homepage "http://www.lambdastack.io/s3lsio"
+  url "https://s3.amazonaws.com/s3lsio/osx/s3lsio-{{version}}.tar.gz"
+  sha256 "{{checksum}}"
+
+  def install
+    bin.install "s3lsio"
+  end
+
+  test do
+  end
+end

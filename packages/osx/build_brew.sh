@@ -19,13 +19,13 @@ REPO_BASE=$(git rev-parse --show-toplevel)
 cargo build --release
 
 APP=s3lsio
-VERSION=$(s3lsio --version | awk '{print $2}')
+VERSION=$($REPO_BASE/target/release/s3lsio --version | awk '{print $2}')
 
 cp $REPO_BASE/target/release/$APP .
 tar -cvzf $APP-$VERSION.tar.gz $APP
 
-s3lsio cp $APP-$VERSION.tar.gz s3://s3lsio/osx/$APP-$VERSION.tar.gz
-s3lsio acl set public-read s3://s3lsio/osx/$APP-$VERSION.tar.gz
+./s3lsio cp $APP-$VERSION.tar.gz s3://s3lsio/osx/$APP-$VERSION.tar.gz
+./s3lsio acl set public-read s3://s3lsio/osx/$APP-$VERSION.tar.gz
 
 # NB: This is not a good way but it creates the hash to change in s3lsio.rb.
 # This needs to be changed soon to make it smooth...
@@ -39,9 +39,10 @@ CHECKSUM=$(shasum -a 256 $APP-$VERSION.tar.gz | awk '{print $1}')
 
 # This file is found in https://github.com/lambdastackio/lsiotemplate.
 # It's a handlebars rust template cli
-lsiotemplate -d "{\"version\": \"$VERSION\", \"checksum\": \"$CHECKSUM\"}" -t homebrew-tap/s3lsio.rb.hbs -o homebrew-tap/s3lsio.rb
+echo "Checksum - $CHECKSUM"
+echo "Version - $VERSION"
 
-echo $CHECKSUM
+lsiotemplate -d "{\"version\": \"$VERSION\", \"checksum\": \"$CHECKSUM\"}" -t s3lsio.rb.hbs -o homebrew-tap/s3lsio.rb json
 
 rm $APP-$VERSION.tar.gz
 rm $APP
