@@ -6,11 +6,26 @@ Do the above command instead of the normal git clone ... since there is a submod
 However, if you don't care about that then you can simply leave --recursive off and git clone as normal.
 
 ### Installing
-If you have Rust installed then you can simply do the following and it will compile for your environment.
-Install: cargo install s3lsio
+If you only want to install `s3lsio` then pick from your environment below:
 
-At present, there is not a binary version for each environment so Rust is required. After general release there will be
-packages for each platform supported.
+`OSX (Homebrew)`
+
+The `brew tap` command below is important to setup where Homebrew will look for the package and updates.
+
+>brew tap lambdastackio/tap
+
+>brew install s3lsio
+
+`Linux RPMs` - (replace 0.1.18 with latest version)
+
+>wget https://s3.amazonaws.com/s3lsio/osx/s3lsio-0.1.18.tar.gz
+
+>tar -xzvf s3lsio-0.1.18.tar.gz
+
+>sudo rpm -Uvh s3lsio-0.1.18.rpm
+
+If you have `Rust` installed and want to use cargo
+>cargo install s3lsio
 
 To install Rust (if needed):
 (Linux and Mac) curl -sSf https://static.rust-lang.org/rustup.sh | sh
