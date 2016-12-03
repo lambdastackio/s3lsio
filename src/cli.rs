@@ -154,7 +154,7 @@ pub fn build_cli<'a>(app: &str, home: &'a str, version: &'a str) -> App<'a, 'a> 
       .about("Head Bucket or Object: s3lsio head s3://<bucket> or s3lsio head s3://<bucket>/<object>")
       .arg_from_usage("[bucket] 'Bucket name'"))
    .subcommand(SubCommand::with_name("ls")
-      .about("List Buckets or Objects in bucket with optional version tag: s3lsio ls OR s3lsio ls s3://<bucket>/<prefix> <option>")
+      .about("List Buckets or Objects in bucket with optional version tag: s3lsio ls OR s3lsio ls s3://<bucket>/<prefix> ver or multi")
       .arg_from_usage("[bucket] 'Bucket name'")
       .arg_from_usage("[option] 'ver or multi'")
       .arg_from_usage("[upload_id] 'multipart upload ID option'"))
