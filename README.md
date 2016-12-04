@@ -1,6 +1,6 @@
 ## S3lsio
 
-![s3lsio](https://img.shields.io/crates/v/s3lsio.svg)
+![s3lsio](https://img.shields.io/crates/v/s3lsio.svg) [![Crates.io](https://img.shields.io/crates/d/s3lsio.svg)]() [![Crates.io](https://img.shields.io/crates/l/s3lsio.svg)]()
 
 ### Cloning and Committing PRs
 git clone --recursive https://github.com/lambdastackio/s3lsio.git
