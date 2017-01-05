@@ -40,7 +40,7 @@ with third party systems that implement an S3 interface like Ceph. Ceph Hammer a
 use V4.
 
 ### Design
-Simple as possible but flexible enough to be used in cron jobs, every day utility use, scripts etc.
+Simple as possible but flexible enough to be used in cron jobs, every day utility use, scripts etc. Additional AWS type storage options are coming soon.
 
 ### Packaging
 Deb/RPM - EVR (Epoch.Version.Release) - Follow semantic versioning which is now standard. Currently, you have to maintain the versioning information on packages, Cargo.toml and CLI which is a pain because you will often forget to properly update each of those. The CLI is now reading from the toml file but the others are not. So, an effort will soon be underway in a build.rs process to dynamically update those to match the Cargo.toml file before building begins to keep everything in sync.

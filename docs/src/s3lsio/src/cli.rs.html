@@ -319,6 +319,15 @@
 <span id="275">275</span>
 <span id="276">276</span>
 <span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 LambdaStack All rights reserved.</span>
 <span class='comment'>//</span>
@@ -336,16 +345,14 @@
 
 <span class='kw'>use</span> <span class='ident'>clap</span>::{<span class='ident'>App</span>, <span class='ident'>Arg</span>, <span class='ident'>SubCommand</span>};
 
+<span class='kw'>static</span> <span class='ident'>DEFAULT_USER_AGENT</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;static</span> <span class='ident'>str</span> <span class='op'>=</span> <span class='macro'>concat</span><span class='macro'>!</span>(<span class='macro'>env</span><span class='macro'>!</span>(<span class='string'>&quot;CARGO_PKG_NAME&quot;</span>), <span class='string'>&quot;/&quot;</span>, <span class='macro'>env</span><span class='macro'>!</span>(<span class='string'>&quot;CARGO_PKG_VERSION&quot;</span>));
+
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>build_cli</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span><span class='op'>&gt;</span>(<span class='ident'>app</span>: <span class='kw-2'>&amp;</span><span class='ident'>str</span>, <span class='ident'>home</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>str</span>, <span class='ident'>version</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>str</span>) <span class='op'>-&gt;</span> <span class='ident'>App</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='lifetime'>&#39;a</span><span class='op'>&gt;</span> {
   <span class='ident'>App</span>::<span class='ident'>new</span>(<span class='ident'>app</span>)
     .<span class='ident'>about</span>(<span class='string'>&quot;S3 Client and Benchmarking Utility that can access AWS S3, Ceph or any third party S3 enable environment.&quot;</span>)
     .<span class='ident'>author</span>(<span class='string'>&quot;Chris Jones&quot;</span>)
     .<span class='ident'>version</span>(<span class='ident'>version</span>)
     .<span class='ident'>after_help</span>(<span class='string'>&quot;For more information about a specific command, try `s3lsio &lt;command&gt; --help`\nSource code for s3lsio available at: https://github.com/lambdastackio/s3lsio&quot;</span>)
-<span class='comment'>//    .arg(Arg::with_name(&quot;admin&quot;)</span>
-<span class='comment'>//      .short(&quot;a&quot;)</span>
-<span class='comment'>//      .long(&quot;admin&quot;)</span>
-<span class='comment'>//      .help(&quot;Ceph RGW Admin&quot;))</span>
    .<span class='ident'>arg</span>(<span class='ident'>Arg</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;bench&quot;</span>)
       .<span class='ident'>short</span>(<span class='string'>&quot;b&quot;</span>)
       .<span class='ident'>long</span>(<span class='string'>&quot;bench&quot;</span>)
@@ -430,6 +437,13 @@
       .<span class='ident'>short</span>(<span class='string'>&quot;t&quot;</span>)
       .<span class='ident'>long</span>(<span class='string'>&quot;time&quot;</span>)
       .<span class='ident'>help</span>(<span class='string'>&quot;Track time duration of operation(s)&quot;</span>))
+   .<span class='ident'>arg</span>(<span class='ident'>Arg</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;user-agent&quot;</span>)
+      .<span class='ident'>short</span>(<span class='string'>&quot;u&quot;</span>)
+      .<span class='ident'>long</span>(<span class='string'>&quot;user-agent&quot;</span>)
+      .<span class='ident'>value_name</span>(<span class='string'>&quot;User-agent&quot;</span>)
+      .<span class='ident'>default_value</span>(<span class='ident'>DEFAULT_USER_AGENT</span>)
+      .<span class='ident'>help</span>(<span class='string'>&quot;Sets the user-agent string&quot;</span>)
+      .<span class='ident'>takes_value</span>(<span class='bool-val'>true</span>))
    .<span class='ident'>arg</span>(<span class='ident'>Arg</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;yes&quot;</span>)
       .<span class='ident'>short</span>(<span class='string'>&quot;y&quot;</span>)
       .<span class='ident'>long</span>(<span class='string'>&quot;yes&quot;</span>)
@@ -471,7 +485,7 @@
       .<span class='ident'>about</span>(<span class='string'>&quot;Head Bucket or Object: s3lsio head s3://&lt;bucket&gt; or s3lsio head s3://&lt;bucket&gt;/&lt;object&gt;&quot;</span>)
       .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[bucket] &#39;Bucket name&#39;&quot;</span>))
    .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;ls&quot;</span>)
-      .<span class='ident'>about</span>(<span class='string'>&quot;List Buckets or Objects in bucket with optional version tag: s3lsio ls OR s3lsio ls s3://&lt;bucket&gt;/&lt;prefix&gt; &lt;option&gt;&quot;</span>)
+      .<span class='ident'>about</span>(<span class='string'>&quot;List Buckets or Objects in bucket with optional version tag: s3lsio ls OR s3lsio ls s3://&lt;bucket&gt;/&lt;prefix&gt; ver or multi&quot;</span>)
       .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[bucket] &#39;Bucket name&#39;&quot;</span>)
       .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[option] &#39;ver or multi&#39;&quot;</span>)
       .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[upload_id] &#39;multipart upload ID option&#39;&quot;</span>))
@@ -543,7 +557,7 @@
        .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;user&quot;</span>)
           .<span class='ident'>about</span>(<span class='string'>&quot;Admin User Options: s3lsio admin user &lt;commands&gt; [options]&quot;</span>)
           .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;create&quot;</span>)
-             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Create User: s3lsio -a user create &lt;user&gt; &lt;display_name&gt; &lt;email&gt; &lt;access_key&gt; &lt;secret_key&gt; &lt;caps&gt;&quot;</span>)
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Create User: s3lsio admin user create &lt;user&gt; &lt;display_name&gt; &lt;email&gt; &lt;access_key&gt; &lt;secret_key&gt; &lt;caps&gt;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[user] &#39;User ID (uid)&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[display_name] &#39;Display name - multi-word names should be inside of quotation marks&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[email] &#39;(Optional) User email (optional)&#39;&quot;</span>)
@@ -552,11 +566,11 @@
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[suspended] &#39;(Optional) Suspend user. Defaults to false&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[caps] &#39;(Optional) Capability of user&#39;&quot;</span>))
           .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;delete&quot;</span>)
-             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Delete User: s3lsio -a user delete &lt;user&gt; &lt;purge_data&gt;&quot;</span>)
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Delete User: s3lsio admin user delete &lt;user&gt; &lt;purge_data&gt;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[user] &#39;User ID (uid)&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[purge_data] &#39;(Optional) Purge data. Defaults to false&#39;&quot;</span>))
           .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;modify&quot;</span>)
-             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Modify User: s3lsio -a user modify &lt;user&gt; &lt;purge_data&gt;&quot;</span>)
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Modify User: s3lsio admin user modify &lt;user&gt; &lt;purge_data&gt;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[user] &#39;User ID (uid)&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[display_name] &#39;(Optional) Display name - multi-word names should be inside of quotation marks&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[suspended] &#39;(Optional) Suspend user. Defaults to false&#39;&quot;</span>)
@@ -566,10 +580,10 @@
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[caps] &#39;(Optional) Secret Key ID (optional)&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[max_buckets] &#39;(Optional) Maximum number of buckets. Defaults to 1000&#39;&quot;</span>))
           .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;get&quot;</span>)
-             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Get User: s3lsio -a user get &lt;user&gt;&quot;</span>)
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Get User: s3lsio admin user get &lt;user&gt;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[user] &#39;User ID (uid)&#39;&quot;</span>))
           .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;ls&quot;</span>)
-             .<span class='ident'>about</span>(<span class='string'>&quot;Admin List Users: s3lsio -a user ls&quot;</span>)))
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin List Users: s3lsio admin user ls&quot;</span>)))
        .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;usage&quot;</span>)
           .<span class='ident'>about</span>(<span class='string'>&quot;Admin Usage Options: s3lsio admin usage ls &lt;user&gt; &lt;start&gt; &lt;end&gt; &lt;show_entries&gt; &lt;show_summary&gt;&quot;</span>)
           .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;ls&quot;</span>)
@@ -579,7 +593,7 @@
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[show_entries] &#39;Specifies whether data entries should be returned [true or false] (Default is false)&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[show_summary] &#39;Specifies whether data summary should be returned [true or false] (Default is false)&#39;&quot;</span>))
           .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;trim&quot;</span>)
-             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Usage Options: s3lsio -a usage trim &lt;user&gt; &lt;start&gt; &lt;end&gt; &lt;remove_all&gt;&quot;</span>)
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Usage Options: s3lsio admin usage trim &lt;user&gt; &lt;start&gt; &lt;end&gt; &lt;remove_all&gt;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[user] &#39;User ID (uid). If not supplied then the command applies to all users&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[start] &#39;Start DateTime [yyyy-mm-dd hh:mm:ss] (optional)&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[end] &#39;End DateTime [yyyy-mm-dd hh:mm:ss] (optional)&#39;&quot;</span>)
@@ -587,15 +601,19 @@
        .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;keys&quot;</span>)
           .<span class='ident'>about</span>(<span class='string'>&quot;Admin Keys Options: s3lsio admin keys &lt;command&gt; [options]&quot;</span>)
           .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;create&quot;</span>)
-             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Keys Create: s3lsio -a keys create &lt;user&gt; &lt;access_key&gt; &lt;secret_key&gt; &lt;generate_key&gt;&quot;</span>)
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Keys Create: s3lsio admin keys create &lt;user&gt; &lt;access_key&gt; &lt;secret_key&gt; &lt;generate_key&gt;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[user] &#39;User ID (uid)&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[generate_key] &#39;(Optional) Generate keys. Default is true&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[access_key] &#39;(Optional) Access Key ID&#39;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[secret_key] &#39;(Optional) Secret Key ID&#39;&quot;</span>))
          .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;delete&quot;</span>)
-             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Delete Keys: s3lsio -a keys delete &lt;access_key&gt; &lt;user&gt;&quot;</span>)
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Delete Keys: s3lsio admin keys delete &lt;access_key&gt; &lt;user&gt;&quot;</span>)
              .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[access_key] &#39;Access Key ID&#39;&quot;</span>)
-             .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[user] &#39;(Optional) User ID (uid)&#39;&quot;</span>))))
+             .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[user] &#39;(Optional) User ID (uid)&#39;&quot;</span>))
+         .<span class='ident'>subcommand</span>(<span class='ident'>SubCommand</span>::<span class='ident'>with_name</span>(<span class='string'>&quot;gen&quot;</span>)
+             .<span class='ident'>about</span>(<span class='string'>&quot;Admin Generate Keys (only): s3lsio admin keys gen &lt;access_key&gt; &lt;secret_key&gt;&quot;</span>)
+             .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[access_key] &#39;(Optional) Access Key ID (default to true)&#39;&quot;</span>)
+             .<span class='ident'>arg_from_usage</span>(<span class='string'>&quot;[secret_key] &#39;(Optional) Secret Key ID (default to true)&#39;&quot;</span>))))
 }
 </pre>
 </section>
